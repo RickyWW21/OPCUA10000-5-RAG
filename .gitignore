@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .Python
+.idea/
 .venv/
 venv/
 env/

@@ -12,9 +12,18 @@ from opcua_kb import KnowledgeBase
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Inspect one OPC UA 10000-5 entity.")
-    parser.add_argument("name")
-    parser.add_argument("--root", default=str(ROOT))
+    parser = argparse.ArgumentParser(
+        description="Inspect one OPC UA 10000-5 entity. 查看单个 OPC UA 10000-5 实体。",
+        epilog=(
+            "Examples:\n"
+            "  python tools/inspect_entity.py ServerType\n"
+            "  python tools/inspect_entity.py BuildInfo\n"
+            "  python tools/inspect_entity.py HasComponent"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("name", help="Entity name or entity id, e.g. ServerType or ObjectType:ServerType.")
+    parser.add_argument("--root", default=str(ROOT), help="Knowledge base project root. Default: repository root.")
     args = parser.parse_args()
 
     kb = KnowledgeBase(args.root)

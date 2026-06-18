@@ -12,10 +12,19 @@ from opcua_kb import KnowledgeBase
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Query the OPC UA 10000-5 knowledge base.")
-    parser.add_argument("query")
-    parser.add_argument("--top-k", type=int, default=10)
-    parser.add_argument("--root", default=str(ROOT))
+    parser = argparse.ArgumentParser(
+        description="Search the OPC UA 10000-5 knowledge base. 检索 OPC UA 10000-5 知识库。",
+        epilog=(
+            'Examples:\n'
+            '  python tools/query_kb.py "ServerType 包含哪些组件？" --top-k 8\n'
+            '  python tools/query_kb.py "BuildInfo 字段" --top-k 5\n'
+            '  python tools/query_kb.py "Table C.1" --top-k 2'
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("query", help="Natural-language query, entity name, section number, or table number.")
+    parser.add_argument("--top-k", type=int, default=10, help="Maximum number of results to print. Default: 10.")
+    parser.add_argument("--root", default=str(ROOT), help="Knowledge base project root. Default: repository root.")
     args = parser.parse_args()
 
     kb = KnowledgeBase(args.root)

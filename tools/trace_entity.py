@@ -12,11 +12,20 @@ from opcua_kb import KnowledgeBase
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Trace OPC UA 10000-5 entity relationships.")
-    parser.add_argument("entity")
-    parser.add_argument("--relation")
-    parser.add_argument("--depth", type=int, default=1)
-    parser.add_argument("--root", default=str(ROOT))
+    parser = argparse.ArgumentParser(
+        description="Trace OPC UA 10000-5 entity relationships. 追踪 OPC UA 10000-5 实体关系。",
+        epilog=(
+            "Examples:\n"
+            "  python tools/trace_entity.py ServerType --relation HAS_COMPONENT --depth 1\n"
+            "  python tools/trace_entity.py ObjectType:ServerType --relation HAS_PROPERTY\n"
+            "  python tools/trace_entity.py BuildInfo --depth 1"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("entity", help="Entity name or entity id, e.g. ServerType or ObjectType:ServerType.")
+    parser.add_argument("--relation", help="Optional relationship filter, e.g. HAS_COMPONENT or USES_DATATYPE.")
+    parser.add_argument("--depth", type=int, default=1, help="Traversal depth. Default: 1.")
+    parser.add_argument("--root", default=str(ROOT), help="Knowledge base project root. Default: repository root.")
     args = parser.parse_args()
 
     kb = KnowledgeBase(args.root)
