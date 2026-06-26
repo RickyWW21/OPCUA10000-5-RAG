@@ -443,6 +443,7 @@ python tools/help.py
 python tools/query_kb.py "ServerType 包含哪些组件？" --top-k 8
 python tools/inspect_entity.py ServerType
 python tools/trace_entity.py ServerType --relation HAS_COMPONENT --depth 1
+python tools/demo_graph.py
 python tools/graph_kb.py --format html --output exports/knowledge_graph.html
 ```
 
@@ -462,6 +463,7 @@ python tools/build_kb.py --help
 python tools/query_kb.py --help
 python tools/inspect_entity.py --help
 python tools/trace_entity.py --help
+python tools/demo_graph.py --help
 python tools/graph_kb.py --help
 ```
 
@@ -479,6 +481,7 @@ python tools/graph_kb.py --help
 生成全局知识图谱：
 
 ```powershell
+python tools/demo_graph.py
 python tools/graph_kb.py --format html --output exports/knowledge_graph.html
 python tools/graph_kb.py --format json --output exports/knowledge_graph.json
 ```

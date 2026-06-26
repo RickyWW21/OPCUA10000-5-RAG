@@ -47,6 +47,10 @@ Main commands / 主要命令
       Generate an offline HTML knowledge graph. Edge weight means aggregated relationship strength.
       生成离线 HTML 知识图谱；边权重表示聚合后的关联强度。
 
+  python tools/demo_graph.py
+      Run a small ServerType graph demo and print the strongest related nodes and edges.
+      运行一个 ServerType 图谱演示，并打印最强关联节点和边。
+
 Common query examples / 常用查询示例
   python tools/query_kb.py "ServerType components" --top-k 5
   python tools/query_kb.py "BuildInfo 字段" --top-k 5
@@ -67,6 +71,8 @@ Relationship examples / 关系追踪示例
   python tools/trace_entity.py BuildInfo --depth 1
 
 Knowledge graph examples / 知识图谱示例
+  python tools/demo_graph.py
+  python tools/demo_graph.py --focus BuildInfo --depth 2 --open
   python tools/graph_kb.py --format html --output exports/knowledge_graph.html
   python tools/graph_kb.py --format json --output exports/knowledge_graph.json
   python tools/graph_kb.py --focus ServerType --depth 2 --format html --output exports/server_type_graph.html
