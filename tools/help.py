@@ -43,6 +43,10 @@ Main commands / 主要命令
       Trace graph relationships from an entity. Omit --relation to show all outgoing relations.
       追踪实体关系图；省略 --relation 可显示全部出边关系。
 
+  python tools/graph_kb.py --format html --output exports/knowledge_graph.html
+      Generate an offline HTML knowledge graph. Edge weight means aggregated relationship strength.
+      生成离线 HTML 知识图谱；边权重表示聚合后的关联强度。
+
 Common query examples / 常用查询示例
   python tools/query_kb.py "ServerType components" --top-k 5
   python tools/query_kb.py "BuildInfo 字段" --top-k 5
@@ -62,6 +66,12 @@ Relationship examples / 关系追踪示例
   python tools/trace_entity.py ObjectType:ServerType --relation HAS_PROPERTY --depth 1
   python tools/trace_entity.py BuildInfo --depth 1
 
+Knowledge graph examples / 知识图谱示例
+  python tools/graph_kb.py --format html --output exports/knowledge_graph.html
+  python tools/graph_kb.py --format json --output exports/knowledge_graph.json
+  python tools/graph_kb.py --focus ServerType --depth 2 --format html --output exports/server_type_graph.html
+  python tools/graph_kb.py --relation HAS_COMPONENT,USES_DATATYPE --min-weight 3 --format json
+
 Python API / Python 调用
   from opcua_kb import KnowledgeBase
 
@@ -71,6 +81,7 @@ Python API / Python 调用
   edges = kb.relationships("ObjectType:ServerType", "HAS_COMPONENT")
   chapter = kb.chapter("12.10")
   table = kb.table("C.1")
+  graph = kb.graph(focus="ServerType", depth=2)
 
 Supported entity kinds / 支持的实体类型
   ObjectType, EventType, VariableType, Object, ModellingRule, Method, ReferenceType, DataType
@@ -86,6 +97,14 @@ Supported relationship filters / 支持的关系过滤
   DEFINED_IN_SECTION
   HAS_FIELD
   HAS_CONFORMANCE_UNIT
+
+Graph output / 图谱输出
+  exports/knowledge_graph.html
+      Offline SVG visualization. Open it directly in a browser.
+      离线 SVG 可视化文件，可直接用浏览器打开。
+  exports/knowledge_graph.json
+      Machine-readable nodes and weighted edges for other programs.
+      面向程序调用的节点和加权边数据。
 
 Notes / 注意事项
   - Entity names keep OPC UA English identifiers, e.g. ServerType, HasComponent, BuildInfo.

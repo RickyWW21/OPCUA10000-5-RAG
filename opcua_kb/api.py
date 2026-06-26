@@ -7,6 +7,8 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
+from .graph import build_knowledge_graph
+
 
 class KnowledgeBase:
     def __init__(self, root: str | Path):
@@ -122,6 +124,26 @@ class KnowledgeBase:
 
     def table(self, number: int | str) -> dict[str, Any] | None:
         return self._load_tables().get(str(number).lower())
+
+    def graph(
+        self,
+        focus: str | None = None,
+        relation: str | None = None,
+        depth: int = 1,
+        min_weight: int = 1,
+        include_defined: bool = False,
+        limit: int = 160,
+    ) -> dict[str, Any]:
+        return build_knowledge_graph(
+            list(self._load_entities().values()),
+            self._load_relationships(),
+            focus=focus,
+            relation=relation,
+            depth=depth,
+            min_weight=min_weight,
+            include_defined=include_defined,
+            limit=limit,
+        )
 
     def _exact_search(self, query: str) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
