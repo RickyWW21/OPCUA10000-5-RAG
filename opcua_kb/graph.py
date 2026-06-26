@@ -45,17 +45,13 @@ def build_knowledge_graph(
     depth: int = 1,
     min_weight: int = 1,
     include_defined: bool = False,
-    limit: int = 160,
+    limit: int = 20,
 ) -> dict[str, Any]:
     entity_by_id = {entity["id"]: entity for entity in entities}
     allowed_relations = None if relation is None else {item.strip().upper() for item in relation.split(",") if item.strip()}
     excluded = set() if include_defined else {"DEFINED_BY_TABLE", "DEFINED_IN_SECTION"}
-    seed_ids = _resolve_focus_ids(focus, entities) if focus else set(entity_by_id)
-    scoped_nodes = _scope_nodes(seed_ids, relationships, depth, allowed_relations, excluded) if focus else set(entity_by_id)
-
     edge_counter: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
     evidence: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
-    degrees: Counter[str] = Counter()
 
     for edge in relationships:
         rel = edge.get("relation", "")
@@ -69,7 +65,7 @@ def build_knowledge_graph(
         target = _collapse_node(target, entity_by_id)
         if not source or not target or source == target:
             continue
-        if source not in scoped_nodes and target not in scoped_nodes:
+        if _is_low_value_external(source) or _is_low_value_external(target):
             continue
         key = tuple(sorted((source, target)))
         weight = RELATION_WEIGHTS.get(rel, 1)
@@ -82,8 +78,6 @@ def build_knowledge_graph(
                 "source_ref": edge.get("source_ref", {}),
             }
         )
-        degrees[source] += weight
-        degrees[target] += weight
 
     ranked_edges = []
     for (source, target), relations in edge_counter.items():
@@ -101,18 +95,43 @@ def build_knowledge_graph(
         )
     ranked_edges.sort(key=lambda item: item["weight"], reverse=True)
 
+    seed_ids = _resolve_focus_ids(focus, entities) if focus else set(entity_by_id)
+    scoped_nodes = _scope_collapsed_nodes(seed_ids, ranked_edges, depth) if focus else set(entity_by_id)
+    scoped_edges = [
+        edge for edge in ranked_edges if edge["source"] in scoped_nodes and edge["target"] in scoped_nodes
+    ]
+    if focus and depth <= 1:
+        scoped_edges = [
+            edge for edge in scoped_edges if edge["source"] in seed_ids or edge["target"] in seed_ids
+        ]
+
+    degrees: Counter[str] = Counter()
+    direct_scores: Counter[str] = Counter()
+    for edge in scoped_edges:
+        degrees[edge["source"]] += edge["weight"]
+        degrees[edge["target"]] += edge["weight"]
+        if focus:
+            if edge["source"] in seed_ids:
+                direct_scores[edge["target"]] += edge["weight"]
+            if edge["target"] in seed_ids:
+                direct_scores[edge["source"]] += edge["weight"]
+
     node_ids = set()
-    for edge in ranked_edges[: max(limit * 3, limit)]:
+    for edge in scoped_edges:
         node_ids.add(edge["source"])
         node_ids.add(edge["target"])
     if focus:
         node_ids.update(seed_ids)
 
-    ranked_nodes = sorted(node_ids, key=lambda node_id: degrees[node_id], reverse=True)[:limit]
+    def node_rank(node_id: str) -> tuple[int, int, str]:
+        is_seed = 1 if node_id in seed_ids else 0
+        return (is_seed, direct_scores[node_id], degrees[node_id], node_id)
+
+    ranked_nodes = sorted(node_ids, key=node_rank, reverse=True)[:limit]
     allowed_nodes = set(ranked_nodes)
     filtered_edges = [
-        edge for edge in ranked_edges if edge["source"] in allowed_nodes and edge["target"] in allowed_nodes
-    ][: max(limit * 2, limit)]
+        edge for edge in scoped_edges if edge["source"] in allowed_nodes and edge["target"] in allowed_nodes
+    ][: max(limit + 8, limit)]
 
     nodes = [_node_payload(node_id, entity_by_id, degrees[node_id]) for node_id in ranked_nodes]
     return {
@@ -125,6 +144,7 @@ def build_knowledge_graph(
             "limit": limit,
             "node_count": len(nodes),
             "edge_count": len(filtered_edges),
+            "selection": "top-related",
         },
         "nodes": nodes,
         "edges": filtered_edges,
@@ -254,23 +274,16 @@ def _resolve_focus_ids(focus: str | None, entities: list[dict[str, Any]]) -> set
     return result or {focus}
 
 
-def _scope_nodes(
+def _scope_collapsed_nodes(
     seeds: set[str],
-    relationships: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
     depth: int,
-    allowed_relations: set[str] | None,
-    excluded: set[str],
 ) -> set[str]:
     scoped = set(seeds)
     frontier = set(seeds)
     for _ in range(max(depth, 1)):
         next_frontier = set()
-        for edge in relationships:
-            rel = edge.get("relation", "")
-            if allowed_relations and rel not in allowed_relations:
-                continue
-            if rel in excluded:
-                continue
+        for edge in edges:
             source = edge.get("source")
             target = edge.get("target")
             if source in frontier:
@@ -298,6 +311,11 @@ def _collapse_node(node_id: str | None, entity_by_id: dict[str, dict[str, Any]])
         compact_candidate = f"{prefix}:{value.replace(' ', '')}"
         if compact_candidate in entity_by_id:
             return compact_candidate
+        if prefix == "DataType":
+            base_value = value.replace("[]", "").replace("[", "").replace("]", "").replace(" ", "")
+            base_candidate = f"DataType:{base_value}"
+            if base_candidate in entity_by_id:
+                return base_candidate
     if "." in node_id:
         prefix, rest = node_id.split(":", 1) if ":" in node_id else ("", node_id)
         owner = rest.split(".", 1)[0]
@@ -314,6 +332,11 @@ def _collapse_node(node_id: str | None, entity_by_id: dict[str, dict[str, Any]])
                 return candidate
         return f"{prefix}:{owner}" if prefix else owner
     return node_id
+
+
+def _is_low_value_external(node_id: str) -> bool:
+    value = node_id.lower().replace(" ", "")
+    return value in {"-", "--"} or value.startswith("datatype:definedin") or value.startswith("definedin")
 
 
 def _node_payload(node_id: str, entity_by_id: dict[str, dict[str, Any]], score: int) -> dict[str, Any]:
