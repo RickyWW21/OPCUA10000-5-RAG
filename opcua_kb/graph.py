@@ -45,7 +45,7 @@ def build_knowledge_graph(
     depth: int = 1,
     min_weight: int = 1,
     include_defined: bool = False,
-    limit: int = 20,
+    limit: int = 12,
 ) -> dict[str, Any]:
     entity_by_id = {entity["id"]: entity for entity in entities}
     allowed_relations = None if relation is None else {item.strip().upper() for item in relation.split(",") if item.strip()}
@@ -131,7 +131,7 @@ def build_knowledge_graph(
     allowed_nodes = set(ranked_nodes)
     filtered_edges = [
         edge for edge in scoped_edges if edge["source"] in allowed_nodes and edge["target"] in allowed_nodes
-    ][: max(limit + 8, limit)]
+    ][: max(limit + 2, limit)]
 
     nodes = [_node_payload(node_id, entity_by_id, degrees[node_id]) for node_id in ranked_nodes]
     return {

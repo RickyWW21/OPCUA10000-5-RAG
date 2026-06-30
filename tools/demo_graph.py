@@ -27,7 +27,7 @@ def main() -> None:
     parser.add_argument("--focus", default="ServerType", help="Central entity for the demo graph. Default: ServerType.")
     parser.add_argument("--relation", help="Optional relation filter, e.g. HAS_COMPONENT or USES_DATATYPE.")
     parser.add_argument("--depth", type=int, default=1, help="Graph traversal depth. Default: 1.")
-    parser.add_argument("--limit", type=int, default=12, help="Maximum top related graph nodes. Default: 12.")
+    parser.add_argument("--limit", type=int, default=7, help="Maximum top related graph nodes. Default: 7.")
     parser.add_argument("--open", action="store_true", help="Open the generated HTML file with the default browser.")
     args = parser.parse_args()
 

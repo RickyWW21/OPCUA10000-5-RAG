@@ -29,7 +29,7 @@ def main() -> None:
     parser.add_argument("--depth", type=int, default=1, help="Traversal depth when --focus is set. Default: 1.")
     parser.add_argument("--min-weight", type=int, default=1, help="Minimum aggregated edge weight. Default: 1.")
     parser.add_argument("--include-defined", action="store_true", help="Include DEFINED_BY_TABLE and DEFINED_IN_SECTION edges.")
-    parser.add_argument("--limit", type=int, default=20, help="Maximum number of top related graph nodes. Default: 20.")
+    parser.add_argument("--limit", type=int, default=12, help="Maximum number of top related graph nodes. Default: 12.")
     parser.add_argument("--format", choices=["json", "html"], default="html", help="Output format. Default: html.")
     parser.add_argument(
         "--output",

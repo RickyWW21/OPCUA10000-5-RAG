@@ -132,7 +132,7 @@ class KnowledgeBase:
         depth: int = 1,
         min_weight: int = 1,
         include_defined: bool = False,
-        limit: int = 20,
+        limit: int = 12,
     ) -> dict[str, Any]:
         return build_knowledge_graph(
             list(self._load_entities().values()),
