@@ -5,17 +5,20 @@
   <title>OPC UA 10000-5 Knowledge Graph</title>
   <style>
     body { margin: 0; font-family: Segoe UI, Arial, sans-serif; color: #172033; background: #f8fafc; }
-    header { padding: 18px 26px 12px; border-bottom: 1px solid #d8dee8; background: #ffffff; }
-    h1 { margin: 0 0 6px; font-size: 22px; }
+    header { padding: 10px 18px 8px; border-bottom: 1px solid #d8dee8; background: #ffffff; }
+    h1 { margin: 0 0 3px; font-size: 18px; }
     p { margin: 4px 0; color: #475569; }
-    .wrap { display: grid; grid-template-columns: 1fr 300px; min-height: calc(100vh - 86px); }
-    svg { width: 100%; height: calc(100vh - 86px); background: #f8fafc; }
-    aside { border-left: 1px solid #d8dee8; padding: 16px; background: #fff; overflow: auto; }
-    text { font-size: 12px; fill: #172033; paint-order: stroke; stroke: #f8fafc; stroke-width: 3px; }
+    header p { font-size: 13px; }
+    .wrap { display: grid; grid-template-columns: minmax(0, 1fr) 220px; min-height: calc(100vh - 58px); }
+    svg { width: 100%; height: calc(100vh - 58px); background: #f8fafc; }
+    aside { border-left: 1px solid #d8dee8; padding: 12px; background: #fff; overflow: auto; }
+    aside h2 { margin: 0 0 8px; font-size: 16px; }
+    aside h3 { margin: 14px 0 6px; font-size: 13px; }
+    text { font-size: 13px; fill: #172033; paint-order: stroke; stroke: #f8fafc; stroke-width: 3px; }
     .legend li { display: flex; align-items: center; gap: 8px; margin: 7px 0; color: #334155; }
     .legend b { display: inline-block; width: 14px; height: 14px; border-radius: 50%; }
     code { background: #eef2f7; padding: 2px 4px; border-radius: 4px; }
-    .hint { font-size: 13px; line-height: 1.45; }
+    .hint { font-size: 12px; line-height: 1.35; }
   </style>
 </head>
 <body>
@@ -24,9 +27,9 @@
     <p>Nodes are entities; weighted edges aggregate relationship strength. 节点为实体，边权重表示关联强度。</p>
   </header>
   <main class="wrap">
-    <svg viewBox="0 0 1440 940" role="img" aria-label="Knowledge graph">
-      <g><line x1="720.0" y1="353.7" x2="543.4" y2="470.0" stroke="#94a3b8" stroke-width="6.20" opacity="0.34"><title>ObjectType:ServerType -&gt; VariableType:PropertyType | weight=21 | HAS_TYPE_DEFINITION</title></line><line x1="856.4" y1="470.0" x2="720.0" y2="353.7" stroke="#94a3b8" stroke-width="5.49" opacity="0.34"><title>ModellingRule:Mandatory -&gt; ObjectType:ServerType | weight=18 | HAS_MODELLING_RULE</title></line><line x1="802.4" y1="552.4" x2="720.0" y2="353.7" stroke="#94a3b8" stroke-width="5.01" opacity="0.34"><title>ModellingRule:Optional -&gt; ObjectType:ServerType | weight=16 | HAS_MODELLING_RULE</title></line><line x1="720.0" y1="626.5" x2="720.0" y2="353.7" stroke="#94a3b8" stroke-width="2.63" opacity="0.34"><title>DataType:String -&gt; ObjectType:ServerType | weight=6 | USES_DATATYPE</title></line><line x1="794.2" y1="427.2" x2="720.0" y2="353.7" stroke="#94a3b8" stroke-width="1.91" opacity="0.34"><title>ObjectType:ServerStatusType -&gt; ObjectType:ServerType | weight=3 | HAS_TYPE_DEFINITION</title></line><line x1="720.0" y1="353.7" x2="768.2" y2="386.5" stroke="#94a3b8" stroke-width="1.91" opacity="0.34"><title>ObjectType:ServerType -&gt; ObjectType:VendorServerInfoType | weight=3 | HAS_TYPE_DEFINITION</title></line></g>
-      <g><g class="node" data-kind="ObjectType"><circle cx="720.0" cy="353.7" r="26.0" fill="#2563eb" opacity="0.88"><title>ObjectType:ServerType | ObjectType | score=120 | section=6.3.1</title></circle><text x="750.0" y="357.7">ServerType</text></g><g class="node" data-kind="VariableType"><circle cx="543.4" cy="470.0" r="15.5" fill="#059669" opacity="0.88"><title>VariableType:PropertyType | VariableType | score=21 | section=7.3</title></circle><text x="562.9" y="474.0">PropertyType</text></g><g class="node" data-kind="ModellingRule"><circle cx="856.4" cy="470.0" r="15.0" fill="#9333ea" opacity="0.88"><title>ModellingRule:Mandatory | ModellingRule | score=18 | section=8.4.2</title></circle><text x="875.4" y="474.0">Mandatory</text></g><g class="node" data-kind="ModellingRule"><circle cx="802.4" cy="552.4" r="14.6" fill="#9333ea" opacity="0.88"><title>ModellingRule:Optional | ModellingRule | score=16 | section=8.4.3</title></circle><text x="820.9" y="556.4">Optional</text></g><g class="node" data-kind="DataType"><circle cx="720.0" cy="626.5" r="12.0" fill="#d97706" opacity="0.88"><title>DataType:String | DataType | score=6 | section=12.2.11</title></circle><text x="736.0" y="630.5">String</text></g><g class="node" data-kind="ObjectType"><circle cx="768.2" cy="386.5" r="10.8" fill="#2563eb" opacity="0.88"><title>ObjectType:VendorServerInfoType | ObjectType | score=3 | section=6.3.6</title></circle><text x="783.0" y="390.5">VendorServerInfoType</text></g><g class="node" data-kind="ObjectType"><circle cx="794.2" cy="427.2" r="10.8" fill="#2563eb" opacity="0.88"><title>ObjectType:ServerStatusType | ObjectType | score=3 | section=</title></circle><text x="809.0" y="431.2">ServerStatusType</text></g></g>
+    <svg viewBox="0 0 1680 1080" role="img" aria-label="Knowledge graph">
+      <g><line x1="840.0" y1="272.1" x2="480.9" y2="540.0" stroke="#94a3b8" stroke-width="6.20" opacity="0.34"><title>ObjectType:ServerType -&gt; VariableType:PropertyType | weight=21 | HAS_TYPE_DEFINITION</title></line><line x1="1138.3" y1="540.0" x2="840.0" y2="272.1" stroke="#94a3b8" stroke-width="5.49" opacity="0.34"><title>ModellingRule:Mandatory -&gt; ObjectType:ServerType | weight=18 | HAS_MODELLING_RULE</title></line><line x1="1024.2" y1="724.2" x2="840.0" y2="272.1" stroke="#94a3b8" stroke-width="5.01" opacity="0.34"><title>ModellingRule:Optional -&gt; ObjectType:ServerType | weight=16 | HAS_MODELLING_RULE</title></line><line x1="840.0" y1="868.7" x2="840.0" y2="272.1" stroke="#94a3b8" stroke-width="2.63" opacity="0.34"><title>DataType:String -&gt; ObjectType:ServerType | weight=6 | USES_DATATYPE</title></line><line x1="1021.8" y1="435.1" x2="840.0" y2="272.1" stroke="#94a3b8" stroke-width="1.91" opacity="0.34"><title>ObjectType:ServerStatusType -&gt; ObjectType:ServerType | weight=3 | HAS_TYPE_DEFINITION</title></line><line x1="840.0" y1="272.1" x2="955.1" y2="340.7" stroke="#94a3b8" stroke-width="1.91" opacity="0.34"><title>ObjectType:ServerType -&gt; ObjectType:VendorServerInfoType | weight=3 | HAS_TYPE_DEFINITION</title></line></g>
+      <g><g class="node" data-kind="ObjectType"><circle cx="840.0" cy="272.1" r="26.0" fill="#2563eb" opacity="0.88"><title>ObjectType:ServerType | ObjectType | score=120 | section=6.3.1</title></circle><text x="870.0" y="276.1">ServerType</text></g><g class="node" data-kind="VariableType"><circle cx="480.9" cy="540.0" r="15.5" fill="#059669" opacity="0.88"><title>VariableType:PropertyType | VariableType | score=21 | section=7.3</title></circle><text x="500.5" y="544.0">PropertyType</text></g><g class="node" data-kind="ModellingRule"><circle cx="1138.3" cy="540.0" r="15.0" fill="#9333ea" opacity="0.88"><title>ModellingRule:Mandatory | ModellingRule | score=18 | section=8.4.2</title></circle><text x="1157.2" y="544.0">Mandatory</text></g><g class="node" data-kind="ModellingRule"><circle cx="1024.2" cy="724.2" r="14.6" fill="#9333ea" opacity="0.88"><title>ModellingRule:Optional | ModellingRule | score=16 | section=8.4.3</title></circle><text x="1042.8" y="728.2">Optional</text></g><g class="node" data-kind="DataType"><circle cx="840.0" cy="868.7" r="12.0" fill="#d97706" opacity="0.88"><title>DataType:String | DataType | score=6 | section=12.2.11</title></circle><text x="856.0" y="872.7">String</text></g><g class="node" data-kind="ObjectType"><circle cx="955.1" cy="340.7" r="10.8" fill="#2563eb" opacity="0.88"><title>ObjectType:VendorServerInfoType | ObjectType | score=3 | section=6.3.6</title></circle><text x="969.9" y="344.7">VendorServerInfoType</text></g><g class="node" data-kind="ObjectType"><circle cx="1021.8" cy="435.1" r="10.8" fill="#2563eb" opacity="0.88"><title>ObjectType:ServerStatusType | ObjectType | score=3 | section=</title></circle><text x="1036.6" y="439.1">ServerStatusType</text></g></g>
     </svg>
     <aside>
       <h2>Graph</h2>
