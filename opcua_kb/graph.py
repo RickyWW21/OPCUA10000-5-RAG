@@ -164,11 +164,11 @@ def write_graph_html(graph: dict[str, Any], path: Path) -> None:
 def render_graph_html(graph: dict[str, Any]) -> str:
     nodes = graph.get("nodes", [])
     edges = graph.get("edges", [])
-    width = 1680
-    height = 1080
+    width = 1920
+    height = 1200
     cx = width / 2
     cy = height / 2
-    radius = min(width, height) * 0.46
+    radius = min(width, height) * 0.50
     positions = _layout(nodes, edges, cx, cy, radius)
 
     max_weight = max([edge.get("weight", 1) for edge in edges] or [1])
@@ -221,20 +221,20 @@ def render_graph_html(graph: dict[str, Any]) -> str:
   <title>OPC UA 10000-5 Knowledge Graph</title>
   <style>
     body {{ margin: 0; font-family: Segoe UI, Arial, sans-serif; color: #172033; background: #f8fafc; }}
-    header {{ padding: 10px 18px 8px; border-bottom: 1px solid #d8dee8; background: #ffffff; }}
-    h1 {{ margin: 0 0 3px; font-size: 18px; }}
-    p {{ margin: 4px 0; color: #475569; }}
-    header p {{ font-size: 13px; }}
-    .wrap {{ display: grid; grid-template-columns: minmax(0, 1fr) 220px; min-height: calc(100vh - 58px); }}
-    svg {{ width: 100%; height: calc(100vh - 58px); background: #f8fafc; }}
-    aside {{ border-left: 1px solid #d8dee8; padding: 12px; background: #fff; overflow: auto; }}
-    aside h2 {{ margin: 0 0 8px; font-size: 16px; }}
-    aside h3 {{ margin: 14px 0 6px; font-size: 13px; }}
+    header {{ padding: 6px 14px 5px; border-bottom: 1px solid #d8dee8; background: #ffffff; }}
+    h1 {{ margin: 0 0 1px; font-size: 16px; }}
+    p {{ margin: 2px 0; color: #475569; }}
+    header p {{ font-size: 12px; }}
+    .wrap {{ display: grid; grid-template-columns: minmax(0, 1fr) 160px; min-height: calc(100vh - 42px); }}
+    svg {{ width: 100%; height: calc(100vh - 42px); background: #f8fafc; }}
+    aside {{ border-left: 1px solid #d8dee8; padding: 8px; background: #fff; overflow: auto; }}
+    aside h2 {{ margin: 0 0 6px; font-size: 14px; }}
+    aside h3 {{ margin: 10px 0 5px; font-size: 12px; }}
     text {{ font-size: 13px; fill: #172033; paint-order: stroke; stroke: #f8fafc; stroke-width: 3px; }}
-    .legend li {{ display: flex; align-items: center; gap: 8px; margin: 7px 0; color: #334155; }}
-    .legend b {{ display: inline-block; width: 14px; height: 14px; border-radius: 50%; }}
+    .legend li {{ display: flex; align-items: center; gap: 6px; margin: 5px 0; color: #334155; }}
+    .legend b {{ display: inline-block; width: 12px; height: 12px; border-radius: 50%; }}
     code {{ background: #eef2f7; padding: 2px 4px; border-radius: 4px; }}
-    .hint {{ font-size: 12px; line-height: 1.35; }}
+    .hint {{ font-size: 11px; line-height: 1.25; }}
   </style>
 </head>
 <body>
@@ -377,12 +377,12 @@ def _layout(nodes: list[dict[str, Any]], edges: list[dict[str, Any]], cx: float,
     angle_cursor = -math.pi / 2
     for index, kind in enumerate(kinds):
         group = sorted(by_kind[kind], key=lambda item: item.get("score", 0), reverse=True)
-        group_radius = radius * (0.58 + 0.34 * (index + 1) / max(len(kinds), 1))
+        group_radius = radius * (0.66 + 0.30 * (index + 1) / max(len(kinds), 1))
         spread = 2 * math.pi / max(len(kinds), 1)
         start = angle_cursor + index * spread
         for item_index, node in enumerate(group):
             angle = start + spread * item_index / max(len(group), 1)
-            jitter = 42 * math.sin((item_index + 1) * 1.7)
+            jitter = 52 * math.sin((item_index + 1) * 1.7)
             positions[node["id"]] = (
                 cx + (group_radius + jitter) * math.cos(angle),
                 cy + (group_radius + jitter) * math.sin(angle),
@@ -395,7 +395,7 @@ def _layout(nodes: list[dict[str, Any]], edges: list[dict[str, Any]], cx: float,
     for node in sorted(nodes, key=lambda item: degree[item["id"]], reverse=True)[:12]:
         angle = 2 * math.pi * len([p for p in positions if p]) / max(len(nodes), 1)
         current = positions[node["id"]]
-        positions[node["id"]] = (current[0] * 0.72 + cx * 0.28, current[1] * 0.72 + cy * 0.28)
+        positions[node["id"]] = (current[0] * 0.82 + cx * 0.18, current[1] * 0.82 + cy * 0.18)
     return positions
 
 
