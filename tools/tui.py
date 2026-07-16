@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
 import webbrowser
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -104,6 +106,13 @@ class KnowledgeBaseTUI(App[None]):
         border: solid $primary;
     }
 
+    .relation-results {
+        width: 55%;
+        min-width: 40;
+        margin-right: 1;
+        border: solid $primary;
+    }
+
     .detail {
         width: 1fr;
         height: 1fr;
@@ -169,6 +178,7 @@ class KnowledgeBaseTUI(App[None]):
         self.root = root
         self.kb = KnowledgeBase(root)
         self.search_results: dict[str, dict[str, Any]] = {}
+        self.relation_results: dict[str, dict[str, Any]] = {}
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -215,7 +225,18 @@ class KnowledgeBaseTUI(App[None]):
                         id="relation-depth",
                     )
                     yield Button("追踪关系", variant="primary", id="relation-button")
-                yield DataTable(id="relation-results", classes="full-detail", cursor_type="row")
+                with Horizontal(classes="split"):
+                    yield DataTable(
+                        id="relation-results",
+                        classes="relation-results",
+                        cursor_type="row",
+                    )
+                    yield Markdown(
+                        "## 关系详情\n\n选择左侧关系后，可查看完整目标内容并跳转到相关实体、章节或表格。",
+                        id="relation-detail",
+                        classes="detail",
+                        open_links=False,
+                    )
 
             with TabPane("章节 / 表格", id="docs-tab"):
                 with Horizontal(classes="toolbar"):
@@ -223,11 +244,21 @@ class KnowledgeBaseTUI(App[None]):
                     yield Button("查看章节", variant="primary", id="chapter-button")
                     yield Input(placeholder="表格号，例如 15 或 C.1", id="table-number")
                     yield Button("查看表格", variant="primary", id="table-button")
-                yield Markdown(
-                    "## 文档浏览\n\n输入章节号或表格号查看结构化内容。",
-                    id="docs-detail",
-                    classes="full-detail",
-                )
+                with TabbedContent(initial="docs-structured-tab", id="table-view-tabs"):
+                    with TabPane("结构化数据", id="docs-structured-tab"):
+                        yield Markdown(
+                            "## 文档浏览\n\n输入章节号或表格号查看结构化内容。",
+                            id="docs-detail",
+                            classes="full-detail",
+                        )
+                    with TabPane("常规表格", id="docs-grid-tab"):
+                        yield DataTable(
+                            id="table-grid",
+                            classes="full-detail",
+                            cursor_type="cell",
+                            zebra_stripes=True,
+                            fixed_rows=1,
+                        )
 
             with TabPane("知识图谱", id="graph-tab"):
                 yield Label("留空焦点可生成全局图谱；关系可使用逗号分隔。", classes="section-title")
@@ -270,7 +301,9 @@ class KnowledgeBaseTUI(App[None]):
         search_table = self.query_one("#search-results", DataTable)
         search_table.add_columns("类型", "标题", "章节")
         relation_table = self.query_one("#relation-results", DataTable)
-        relation_table.add_columns("源实体", "关系", "目标实体", "出处")
+        relation_table.add_column("源实体", width=24)
+        relation_table.add_column("关系", width=22)
+        relation_table.add_column("目标摘要", width=42)
         self.query_one("#search-query", Input).focus()
 
     def action_focus_search(self) -> None:
@@ -307,11 +340,32 @@ class KnowledgeBaseTUI(App[None]):
             action()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        if event.data_table.id != "search-results":
+        key = str(event.row_key.value)
+        if event.data_table.id == "search-results":
+            item = self.search_results.get(key)
+            if item:
+                self.query_one("#search-detail", Markdown).update(self._format_search_result(item))
+        elif event.data_table.id == "relation-results":
+            edge = self.relation_results.get(key)
+            if edge:
+                self.query_one("#relation-detail", Markdown).update(self._format_relation(edge))
+
+    def on_markdown_link_clicked(self, event: Markdown.LinkClicked) -> None:
+        if event.markdown.id != "relation-detail":
             return
-        item = self.search_results.get(str(event.row_key.value))
-        if item:
-            self.query_one("#search-detail", Markdown).update(self._format_search_result(item))
+        event.stop()
+        kind, separator, value = event.href.partition(":")
+        if not separator or kind not in {"entity", "chapter", "table", "search"}:
+            self.notify("无法识别该内部链接。", severity="warning")
+            return
+        if kind == "entity":
+            self._open_linked_entity(value)
+        elif kind == "chapter":
+            self._open_linked_chapter(value)
+        elif kind == "table":
+            self._open_linked_table(value)
+        else:
+            self._open_linked_search(value)
 
     def _search(self) -> None:
         query = self.query_one("#search-query", Input).value.strip()
@@ -363,17 +417,22 @@ class KnowledgeBaseTUI(App[None]):
         edges = self.kb.relationships(entity, relation=relation, depth=depth)
         table = self.query_one("#relation-results", DataTable)
         table.clear()
-        for edge in edges:
-            source_ref = edge.get("source_ref") or {}
-            source = " ".join(
-                str(value) for value in (source_ref.get("section"), source_ref.get("table")) if value
-            )
+        self.relation_results.clear()
+        for index, edge in enumerate(edges):
+            key = str(index)
+            self.relation_results[key] = edge
             table.add_row(
-                str(edge.get("source", "")),
+                compact_entity_name(str(edge.get("source", ""))),
                 str(edge.get("relation", "")),
-                str(edge.get("target", "")),
-                source or "-",
+                compact_relation_target(str(edge.get("target", ""))),
+                key=key,
             )
+        detail = self.query_one("#relation-detail", Markdown)
+        if edges:
+            table.move_cursor(row=0)
+            detail.update(self._format_relation(edges[0]))
+        else:
+            detail.update(f"## 未找到关系\n\n实体：`{entity}`")
         self._set_status(f"关系追踪完成：{len(edges)} 条边")
         if not edges:
             self.notify("未找到匹配关系。", severity="warning")
@@ -387,6 +446,7 @@ class KnowledgeBaseTUI(App[None]):
             self._set_status("章节查询无结果")
             return
         target.update(format_chapter(chapter))
+        self.query_one("#table-view-tabs", TabbedContent).active = "docs-structured-tab"
         self._set_status(f"已加载章节：{section}")
 
     def _show_table(self) -> None:
@@ -395,10 +455,21 @@ class KnowledgeBaseTUI(App[None]):
         target = self.query_one("#docs-detail", Markdown)
         if not table:
             target.update(f"## 未找到表格\n\n`{number or '（空）'}`")
+            self.query_one("#table-grid", DataTable).clear(columns=True)
             self._set_status("表格查询无结果")
             return
         target.update(format_table(table))
+        self._populate_table_grid(table)
         self._set_status(f"已加载表格：{number}")
+
+    def _populate_table_grid(self, table: dict[str, Any]) -> None:
+        columns, rows = table_grid_data(table)
+        grid = self.query_one("#table-grid", DataTable)
+        grid.clear(columns=True)
+        for index, column in enumerate(columns):
+            grid.add_column(column or f"列 {index + 1}", key=f"column-{index}")
+        for row in rows:
+            grid.add_row(*(format_table_cell(value) for value in row))
 
     def _generate_graph(self, open_after: bool) -> None:
         focus = self.query_one("#graph-focus", Input).value.strip() or None
@@ -468,6 +539,105 @@ class KnowledgeBaseTUI(App[None]):
             lines.append(f"\n{item['snippet']}")
         return "\n".join(lines)
 
+    def _format_relation(self, edge: dict[str, Any]) -> str:
+        source = str(edge.get("source") or "")
+        target = str(edge.get("target") or "")
+        relation = str(edge.get("relation") or "-")
+        source_ref = edge.get("source_ref") or {}
+        lines = [f"## {relation}"]
+
+        source_link = self._entity_or_search_link(source, "查看源实体")
+        target_link = self._target_link(target)
+        lines.extend(
+            [
+                f"\n- 源：{source_link}",
+                f"- 目标：{target_link}",
+                f"- 关系：`{relation}`",
+            ]
+        )
+
+        section = str(source_ref.get("section") or "")
+        table = str(source_ref.get("table") or "").removeprefix("table-")
+        if section:
+            lines.append(f"- 出处章节：{internal_link(section, 'chapter', section)}")
+        if table:
+            lines.append(f"- 出处表格：{internal_link('Table ' + table, 'table', table)}")
+
+        lines.extend(["\n### 完整目标内容", "", escape_markdown(target) or "（无目标内容）"])
+
+        component = self._find_component(source, target)
+        if component:
+            lines.extend(["\n### 组件信息", ""])
+            for label, key in (
+                ("BrowseName", "browse_name"),
+                ("NodeClass", "node_class"),
+                ("ReferenceType", "reference_type"),
+                ("DataType", "data_type"),
+                ("TypeDefinition", "type_definition"),
+                ("ModellingRule", "modelling_rule"),
+            ):
+                if component.get(key):
+                    lines.append(f"- **{label}**：`{component[key]}`")
+        return "\n".join(lines)
+
+    def _entity_or_search_link(self, entity_id: str, label: str) -> str:
+        if self.kb.get_entity(entity_id):
+            return internal_link(label, "entity", entity_id)
+        return internal_link(label, "search", relation_search_term(entity_id))
+
+    def _target_link(self, target: str) -> str:
+        entity = self.kb.get_entity(target)
+        if entity:
+            return internal_link(str(entity.get("name") or target), "entity", target)
+        if target.startswith("sec-"):
+            section = target.removeprefix("sec-")
+            return internal_link(f"章节 {section}", "chapter", section)
+        if target.startswith("table-"):
+            number = target.removeprefix("table-")
+            return internal_link(f"Table {number}", "table", number)
+        label = compact_relation_target(target, limit=32)
+        return internal_link(label, "search", relation_search_term(target))
+
+    def _find_component(self, source: str, target: str) -> dict[str, Any] | None:
+        entity = self.kb.get_entity(source)
+        if not entity:
+            return None
+        target_name = target.split(":", 1)[-1].split(".")[-1]
+        for component in entity.get("components") or []:
+            browse_name = str(component.get("browse_name") or "")
+            if browse_name == target_name or f"{browse_name}1" == target_name:
+                return component
+        return None
+
+    def _open_linked_entity(self, entity_id: str) -> None:
+        entity = self.kb.get_entity(entity_id)
+        if not entity:
+            self.notify(f"未找到实体：{entity_id}", severity="warning")
+            return
+        self.query_one("#entity-name", Input).value = entity_id
+        self.query_one("#entity-detail", Markdown).update(format_entity(entity))
+        self.query_one(TabbedContent).active = "entity-tab"
+        self.query_one("#entity-name", Input).focus()
+        self._set_status(f"已从关系页打开实体：{entity['name']}")
+
+    def _open_linked_chapter(self, section: str) -> None:
+        self.query_one("#chapter-number", Input).value = section
+        self._show_chapter()
+        self.query_one(TabbedContent).active = "docs-tab"
+        self.query_one("#chapter-number", Input).focus()
+
+    def _open_linked_table(self, number: str) -> None:
+        self.query_one("#table-number", Input).value = number
+        self._show_table()
+        self.query_one(TabbedContent).active = "docs-tab"
+        self.query_one("#table-number", Input).focus()
+
+    def _open_linked_search(self, query: str) -> None:
+        self.query_one("#search-query", Input).value = query
+        self._search()
+        self.query_one(TabbedContent).active = "search-tab"
+        self.query_one("#search-query", Input).focus()
+
     def _set_status(self, message: str) -> None:
         self.query_one("#status-line", Static).update(message)
 
@@ -517,6 +687,37 @@ def format_entity(entity: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def compact_entity_name(entity_id: str) -> str:
+    return entity_id.split(":", 1)[-1]
+
+
+def compact_relation_target(target: str, limit: int = 52) -> str:
+    compact = " ".join(target.split())
+    if ":" in compact:
+        compact = compact.split(":", 1)[1]
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 1].rstrip() + "…"
+
+
+def relation_search_term(target: str) -> str:
+    value = target.split(":", 1)[-1]
+    if "." in value and len(value) < 160:
+        value = value.rsplit(".", 1)[-1]
+    return " ".join(value.split())[:120]
+
+
+def internal_link(label: str, kind: str, value: str) -> str:
+    return f"[{escape_markdown(label)}]({kind}:{quote(value, safe='')})"
+
+
+def escape_markdown(value: str) -> str:
+    escaped = value.replace("\\", "\\\\")
+    for character in ("`", "*", "_", "[", "]", "<", ">"):
+        escaped = escaped.replace(character, f"\\{character}")
+    return escaped
+
+
 def format_chapter(chapter: dict[str, Any]) -> str:
     title = chapter.get("title") or chapter.get("section") or "章节"
     lines = [f"## {chapter.get('section', '')} {title}".strip()]
@@ -529,6 +730,46 @@ def format_chapter(chapter: dict[str, Any]) -> str:
         lines.append(f"\n**表格：** {', '.join(map(str, chapter['tables']))}")
     lines.extend(["\n---\n", str(chapter.get("text") or "（无正文）")])
     return "\n".join(lines)
+
+
+def table_grid_data(table: dict[str, Any]) -> tuple[list[str], list[list[Any]]]:
+    columns = [str(column) for column in (table.get("columns") or table.get("headers") or [])]
+    structured_rows = table.get("rows") or []
+    if columns and structured_rows:
+        rows: list[list[Any]] = []
+        for row in structured_rows:
+            if isinstance(row, dict):
+                rows.append([row.get(column, "") for column in columns])
+            elif isinstance(row, (list, tuple)):
+                rows.append(list(row[: len(columns)]))
+        if rows:
+            return columns, rows
+
+    raw_lines = [str(line) for line in (table.get("raw_lines") or []) if str(line).strip()]
+    if not raw_lines:
+        return ["内容"], [["（无表格数据）"]]
+
+    parsed = list(csv.reader(raw_lines))
+    raw_columns = [cell.strip() for cell in parsed[0]]
+    if len(raw_columns) <= 1:
+        return ["内容"], [[line] for line in raw_lines]
+
+    rows = []
+    for parsed_row in parsed[1:]:
+        if len(parsed_row) != len(raw_columns):
+            if rows:
+                break
+            continue
+        rows.append([cell.strip() for cell in parsed_row])
+    return raw_columns, rows or [[""] * len(raw_columns)]
+
+
+def format_table_cell(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list, tuple)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
 
 
 def format_table(table: dict[str, Any]) -> str:
