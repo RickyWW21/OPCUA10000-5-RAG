@@ -54,6 +54,23 @@ python tools/graph_kb.py --help
 - 设计知识图谱：生成 JSON 或离线 HTML，显示实体之间的关系类型和关联度权重。
 - Python API：通过 `from opcua_kb import KnowledgeBase` 在本地脚本中调用。
 
+## TUI 交互界面
+
+首次使用时安装可选的 TUI 依赖：
+
+```powershell
+python -m pip install -r requirements-tui.txt
+```
+
+然后在项目根目录启动：
+
+```powershell
+python tui.py
+```
+
+TUI 提供搜索、实体详情、关系追踪、章节/表格浏览，以及交互式知识图谱导出。
+使用 `Tab` 在控件间移动，`Enter` 执行操作，`Ctrl+F` 回到搜索，`Ctrl+Q` 退出。
+
 ## 知识图谱
 
 生成全局知识图谱：
