@@ -11,6 +11,8 @@ from .graph import build_knowledge_graph
 
 
 class KnowledgeBase:
+    """Read-only facade over the generated JSONL records and SQLite FTS index."""
+
     def __init__(self, root: str | Path):
         self.root = Path(root)
         self.kb_dir = self.root / "kb"
@@ -18,7 +20,7 @@ class KnowledgeBase:
         self._entities: dict[str, dict[str, Any]] | None = None
         self._aliases: dict[str, str] | None = None
         self._chapters: dict[str, dict[str, Any]] | None = None
-        self._tables: dict[int, dict[str, Any]] | None = None
+        self._tables: dict[str, dict[str, Any]] | None = None
         self._relationships: list[dict[str, Any]] | None = None
 
     def get_entity(self, name: str) -> dict[str, Any] | None:
@@ -33,10 +35,13 @@ class KnowledgeBase:
         return None
 
     def search(self, query: str, top_k: int = 10) -> list[dict[str, Any]]:
+        """Return exact entity/document matches followed by full-text results."""
+
         query = query.strip()
         if not query:
             return []
 
+        # Exact identifiers should remain ahead of less precise FTS matches.
         exact_results = self._exact_search(query)
         if len(exact_results) >= top_k:
             return exact_results[:top_k]
@@ -95,12 +100,15 @@ class KnowledgeBase:
     def relationships(
         self, entity: str, relation: str | None = None, depth: int = 1
     ) -> list[dict[str, Any]]:
+        """Traverse outgoing relationships breadth-first up to ``depth`` hops."""
+
         start = self._resolve_entity_id(entity)
         if not start:
             return []
         relationships = self._load_relationships()
         relation_norm = relation.upper() if relation else None
         results: list[dict[str, Any]] = []
+        # A visited set prevents cycles while preserving breadth-first result order.
         visited = {start}
         queue: deque[tuple[str, int]] = deque([(start, 0)])
         while queue:
@@ -134,6 +142,8 @@ class KnowledgeBase:
         include_defined: bool = False,
         limit: int = 12,
     ) -> dict[str, Any]:
+        """Build a serializable graph view from the cached entity relationships."""
+
         return build_knowledge_graph(
             list(self._load_entities().values()),
             self._load_relationships(),

@@ -47,12 +47,16 @@ def build_knowledge_graph(
     include_defined: bool = False,
     limit: int = 12,
 ) -> dict[str, Any]:
+    """Collapse raw relationship records into a weighted, display-ready graph."""
+
     entity_by_id = {entity["id"]: entity for entity in entities}
     allowed_relations = None if relation is None else {item.strip().upper() for item in relation.split(",") if item.strip()}
     excluded = set() if include_defined else {"DEFINED_BY_TABLE", "DEFINED_IN_SECTION"}
     edge_counter: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
     evidence: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
 
+    # Multiple raw references between the same pair become one weighted edge while
+    # retaining a small evidence sample for inspection.
     for edge in relationships:
         rel = edge.get("relation", "")
         if allowed_relations and rel not in allowed_relations:
@@ -123,7 +127,7 @@ def build_knowledge_graph(
     if focus:
         node_ids.update(seed_ids)
 
-    def node_rank(node_id: str) -> tuple[int, int, str]:
+    def node_rank(node_id: str) -> tuple[int, int, int, str]:
         is_seed = 1 if node_id in seed_ids else 0
         return (is_seed, direct_scores[node_id], degrees[node_id], node_id)
 
@@ -166,6 +170,8 @@ def write_graph_html(graph: dict[str, Any], path: Path) -> None:
 
 
 def render_graph_html(graph: dict[str, Any]) -> str:
+    """Render the graph as a self-contained interactive HTML document."""
+
     return _render_interactive_graph_html(graph)
 
 
@@ -231,9 +237,9 @@ def _render_interactive_graph_html(graph: dict[str, Any]) -> str:
         f"<li>{html.escape(name)}: {value}</li>" for name, value in relation_counts.most_common(12)
     )
 
-    graph_json = html.escape(json.dumps(graph, ensure_ascii=False))
-    positions_json = html.escape(
-        json.dumps({key: {"x": value[0], "y": value[1]} for key, value in positions.items()}, ensure_ascii=False)
+    graph_json = _json_for_html_script(graph)
+    positions_json = _json_for_html_script(
+        {key: {"x": value[0], "y": value[1]} for key, value in positions.items()}
     )
     metadata = graph.get("metadata", {})
     selection = html.escape(str(metadata.get("selection", "")))
@@ -544,7 +550,7 @@ def _render_static_graph_html(graph: dict[str, Any]) -> str:
         f"<li>{html.escape(name)}: {value}</li>" for name, value in relation_counts.most_common(12)
     )
 
-    graph_json = html.escape(json.dumps(graph, ensure_ascii=False))
+    graph_json = _json_for_html_script(graph)
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -633,6 +639,8 @@ def _scope_collapsed_nodes(
 
 
 def _collapse_node(node_id: str | None, entity_by_id: dict[str, dict[str, Any]]) -> str | None:
+    """Map component-like IDs back to their owning top-level graph entity."""
+
     if not node_id:
         return None
     if node_id in entity_by_id:
@@ -697,6 +705,8 @@ def _node_payload(node_id: str, entity_by_id: dict[str, dict[str, Any]], score: 
 
 
 def _layout(nodes: list[dict[str, Any]], edges: list[dict[str, Any]], cx: float, cy: float, radius: float) -> dict[str, tuple[float, float]]:
+    """Create a deterministic radial layout grouped by OPC UA node kind."""
+
     if not nodes:
         return {}
     by_kind: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -724,10 +734,24 @@ def _layout(nodes: list[dict[str, Any]], edges: list[dict[str, Any]], cx: float,
         degree[edge["source"]] += edge.get("weight", 1)
         degree[edge["target"]] += edge.get("weight", 1)
     for node in sorted(nodes, key=lambda item: degree[item["id"]], reverse=True)[:12]:
-        angle = 2 * math.pi * len([p for p in positions if p]) / max(len(nodes), 1)
         current = positions[node["id"]]
         positions[node["id"]] = (current[0] * 0.82 + cx * 0.18, current[1] * 0.82 + cy * 0.18)
     return positions
+
+
+def _json_for_html_script(value: Any) -> str:
+    """Serialize JSON for a raw-text script element without ending the element early."""
+
+    # HTML entities are not decoded inside script raw text. Unicode escapes keep the
+    # payload valid JSON and neutralize values containing a literal ``</script>``.
+    return (
+        json.dumps(value, ensure_ascii=False)
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
 
 
 def _norm(value: str) -> str:

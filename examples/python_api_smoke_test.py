@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -146,10 +147,27 @@ def check_graph(kb: KnowledgeBase, output_dir: Path) -> None:
 
     assert_true(json_path.exists(), "Graph JSON should be written")
     assert_true(html_path.exists(), "Graph HTML should be written")
+    check_embedded_graph_json(html_path)
 
     print(json.dumps(metadata, ensure_ascii=False, indent=2))
     print(f"graph json: {json_path}")
     print(f"graph html: {html_path}")
+
+
+def check_embedded_graph_json(html_path: Path) -> None:
+    """Verify that browser-consumed script payloads remain valid JSON."""
+
+    page = html_path.read_text(encoding="utf-8")
+    for element_id in ("graph-data", "graph-positions"):
+        match = re.search(
+            rf'id="{element_id}">(.*?)</script>',
+            page,
+            flags=re.DOTALL,
+        )
+        assert_true(match, f"Graph HTML should embed {element_id}")
+        payload = match.group(1)
+        assert_true("&quot;" not in payload, f"{element_id} should not contain HTML entities")
+        json.loads(payload)
 
 
 def print_entity_summary(entity: dict[str, Any]) -> None:

@@ -570,7 +570,8 @@ def _table_kind(caption: str, raw_lines: list[str]) -> str:
 def _csv_cells(line: str) -> list[str]:
     try:
         return [cell.strip() for cell in next(csv.reader(StringIO(line)))]
-    except Exception:
+    except (csv.Error, StopIteration):
+        # Preserve recoverability for malformed source rows without hiding code errors.
         return [cell.strip() for cell in line.split(",")]
 
 

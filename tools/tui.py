@@ -54,6 +54,8 @@ RELATION_OPTIONS = [
 
 
 class KnowledgeBaseTUI(App[None]):
+    """Interactive terminal front end backed by the repository's Python API."""
+
     TITLE = "OPC UA 10000-5 知识库"
     SUB_TITLE = "交互式终端浏览器"
 
@@ -257,7 +259,6 @@ class KnowledgeBaseTUI(App[None]):
                             classes="full-detail",
                             cursor_type="cell",
                             zebra_stripes=True,
-                            fixed_rows=1,
                         )
 
             with TabPane("知识图谱", id="graph-tab"):
@@ -351,6 +352,8 @@ class KnowledgeBaseTUI(App[None]):
                 self.query_one("#relation-detail", Markdown).update(self._format_relation(edge))
 
     def on_markdown_link_clicked(self, event: Markdown.LinkClicked) -> None:
+        """Route custom relation-detail links without opening an external browser."""
+
         if event.markdown.id != "relation-detail":
             return
         event.stop()
@@ -540,6 +543,8 @@ class KnowledgeBaseTUI(App[None]):
         return "\n".join(lines)
 
     def _format_relation(self, edge: dict[str, Any]) -> str:
+        """Build relation details with links to the best available TUI destination."""
+
         source = str(edge.get("source") or "")
         target = str(edge.get("target") or "")
         relation = str(edge.get("relation") or "-")
@@ -602,6 +607,8 @@ class KnowledgeBaseTUI(App[None]):
         entity = self.kb.get_entity(source)
         if not entity:
             return None
+        # Builder-generated component targets may have a trailing ``1`` to make an
+        # instance ID unique, while the source entity keeps the original BrowseName.
         target_name = target.split(":", 1)[-1].split(".")[-1]
         for component in entity.get("components") or []:
             browse_name = str(component.get("browse_name") or "")
@@ -708,6 +715,8 @@ def relation_search_term(target: str) -> str:
 
 
 def internal_link(label: str, kind: str, value: str) -> str:
+    """Build an encoded Markdown link handled by ``on_markdown_link_clicked``."""
+
     return f"[{escape_markdown(label)}]({kind}:{quote(value, safe='')})"
 
 
@@ -733,6 +742,8 @@ def format_chapter(chapter: dict[str, Any]) -> str:
 
 
 def table_grid_data(table: dict[str, Any]) -> tuple[list[str], list[list[Any]]]:
+    """Convert structured rows or raw CSV lines into a rectangular TUI table."""
+
     columns = [str(column) for column in (table.get("columns") or table.get("headers") or [])]
     structured_rows = table.get("rows") or []
     if columns and structured_rows:
@@ -749,6 +760,7 @@ def table_grid_data(table: dict[str, Any]) -> tuple[list[str], list[list[Any]]]:
     if not raw_lines:
         return ["内容"], [["（无表格数据）"]]
 
+    # Some early specification tables only retain their source CSV lines.
     parsed = list(csv.reader(raw_lines))
     raw_columns = [cell.strip() for cell in parsed[0]]
     if len(raw_columns) <= 1:
@@ -758,6 +770,7 @@ def table_grid_data(table: dict[str, Any]) -> tuple[list[str], list[list[Any]]]:
     for parsed_row in parsed[1:]:
         if len(parsed_row) != len(raw_columns):
             if rows:
+                # Explanatory prose often follows the CSV block in raw_lines.
                 break
             continue
         rows.append([cell.strip() for cell in parsed_row])
@@ -786,6 +799,8 @@ def format_table(table: dict[str, Any]) -> str:
 
 
 def _best_summary(entity: dict[str, Any]) -> str:
+    """Prefer Chinese unless known mojibake markers indicate damaged source text."""
+
     summary_zh = str(entity.get("summary_zh") or "")
     mojibake_markers = ("鏄", "锛", "銆", "绗", "鐨", "€", "鍨", "瀹")
     if summary_zh and not any(marker in summary_zh for marker in mojibake_markers):
