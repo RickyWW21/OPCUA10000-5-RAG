@@ -52,35 +52,76 @@ def build_knowledge_graph(
     """Collapse raw relationship records into a weighted, display-ready graph."""
 
     entity_by_id = {entity["id"]: entity for entity in entities}
-    allowed_relations = None if relation is None else {item.strip().upper() for item in relation.split(",") if item.strip()}
+    allowed_relations = _allowed_relations(relation)
     excluded = set() if include_defined else {"DEFINED_BY_TABLE", "DEFINED_IN_SECTION"}
+    ranked_edges = _aggregate_collapsed_edges(
+        relationships, entity_by_id, allowed_relations, excluded, min_weight
+    )
+    seed_ids, scoped_edges = _scope_edges(focus, entities, entity_by_id, ranked_edges, depth)
+    ranked_nodes, degrees, filtered_edges = _rank_graph_nodes(
+        scoped_edges, seed_ids, focus, limit
+    )
+    nodes = [
+        _node_payload(node_id, entity_by_id, degrees[node_id])
+        for node_id in ranked_nodes
+    ]
+    return {
+        "metadata": _graph_metadata(
+            focus,
+            allowed_relations,
+            depth,
+            min_weight,
+            include_defined,
+            limit,
+            len(nodes),
+            len(filtered_edges),
+        ),
+        "nodes": nodes,
+        "edges": filtered_edges,
+    }
+
+
+def _allowed_relations(relation: str | None) -> set[str] | None:
+    """Normalize a comma-separated relation filter or retain all relations."""
+
+    if relation is None:
+        return None
+    return {item.strip().upper() for item in relation.split(",") if item.strip()}
+
+
+def _aggregate_collapsed_edges(
+    relationships: list[dict[str, Any]],
+    entity_by_id: dict[str, dict[str, Any]],
+    allowed_relations: set[str] | None,
+    excluded_relations: set[str],
+    min_weight: int,
+) -> list[dict[str, Any]]:
+    """Filter raw edges, collapse component IDs, and aggregate visible pairs."""
+
     edge_counter: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
     evidence: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
 
     # Multiple raw references between the same pair become one weighted edge while
     # retaining a small evidence sample for inspection.
     for edge in relationships:
-        rel = edge.get("relation", "")
-        if allowed_relations and rel not in allowed_relations:
+        relation = edge.get("relation", "")
+        if allowed_relations and relation not in allowed_relations:
             continue
-        if rel in excluded:
+        if relation in excluded_relations:
             continue
-        source = edge.get("source")
-        target = edge.get("target")
-        source = _collapse_node(source, entity_by_id)
-        target = _collapse_node(target, entity_by_id)
+        source = _collapse_node(edge.get("source"), entity_by_id)
+        target = _collapse_node(edge.get("target"), entity_by_id)
         if not source or not target or source == target:
             continue
         if _is_low_value_external(source) or _is_low_value_external(target):
             continue
         key = tuple(sorted((source, target)))
-        weight = RELATION_WEIGHTS.get(rel, 1)
-        edge_counter[key][rel] += weight
+        edge_counter[key][relation] += RELATION_WEIGHTS.get(relation, 1)
         evidence[key].append(
             {
                 "source": edge.get("source"),
                 "target": edge.get("target"),
-                "relation": rel,
+                "relation": relation,
                 "source_ref": edge.get("source_ref", {}),
             }
         )
@@ -100,6 +141,17 @@ def build_knowledge_graph(
             }
         )
     ranked_edges.sort(key=lambda item: item["weight"], reverse=True)
+    return ranked_edges
+
+
+def _scope_edges(
+    focus: str | None,
+    entities: list[dict[str, Any]],
+    entity_by_id: dict[str, dict[str, Any]],
+    ranked_edges: list[dict[str, Any]],
+    depth: int,
+) -> tuple[set[str], list[dict[str, Any]]]:
+    """Limit edges to the requested focus neighborhood after node collapse."""
 
     # Scope traversal happens after component IDs are collapsed, matching the nodes
     # that users actually see rather than transient field/component identifiers.
@@ -112,6 +164,13 @@ def build_knowledge_graph(
         scoped_edges = [
             edge for edge in scoped_edges if edge["source"] in seed_ids or edge["target"] in seed_ids
         ]
+    return seed_ids, scoped_edges
+
+
+def _rank_graph_nodes(
+    scoped_edges: list[dict[str, Any]], seed_ids: set[str], focus: str | None, limit: int
+) -> tuple[list[str], Counter[str], list[dict[str, Any]]]:
+    """Rank graph nodes, apply the requested limit, and keep compatible edges."""
 
     # Ranking keeps focus nodes first, then favors direct and globally strong links.
     degrees: Counter[str] = Counter()
@@ -145,22 +204,31 @@ def build_knowledge_graph(
     ]
     if limit > 0:
         filtered_edges = filtered_edges[: max(limit + 2, limit)]
+    return ranked_nodes, degrees, filtered_edges
 
-    nodes = [_node_payload(node_id, entity_by_id, degrees[node_id]) for node_id in ranked_nodes]
+
+def _graph_metadata(
+    focus: str | None,
+    allowed_relations: set[str] | None,
+    depth: int,
+    min_weight: int,
+    include_defined: bool,
+    limit: int,
+    node_count: int,
+    edge_count: int,
+) -> dict[str, Any]:
+    """Build the stable metadata schema returned with every graph payload."""
+
     return {
-        "metadata": {
-            "focus": focus,
-            "relation": sorted(allowed_relations) if allowed_relations else None,
-            "depth": depth,
-            "min_weight": min_weight,
-            "include_defined": include_defined,
-            "limit": limit,
-            "node_count": len(nodes),
-            "edge_count": len(filtered_edges),
-            "selection": "all" if limit <= 0 else "top-related",
-        },
-        "nodes": nodes,
-        "edges": filtered_edges,
+        "focus": focus,
+        "relation": sorted(allowed_relations) if allowed_relations else None,
+        "depth": depth,
+        "min_weight": min_weight,
+        "include_defined": include_defined,
+        "limit": limit,
+        "node_count": node_count,
+        "edge_count": edge_count,
+        "selection": "all" if limit <= 0 else "top-related",
     }
 
 

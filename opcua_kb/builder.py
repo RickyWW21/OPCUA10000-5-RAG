@@ -307,68 +307,166 @@ def _parse_table_rows(table: Table) -> None:
 def _apply_table_to_entity(entity: dict[str, Any], table: Table, relationships: list[dict[str, Any]]) -> None:
     """Merge one normalized table into an entity and emit its graph edges."""
 
+    _apply_table_attributes(entity, table)
+    _add_conformance_unit_edges(entity, table, relationships)
+
+    for row in table.rows:
+        if _apply_supertype_row(entity, row, table, relationships):
+            continue
+        if "Reference" in table.table_kind or entity["kind"] == "ReferenceType":
+            _apply_reference_type_row(entity, row, table, relationships)
+        _append_reference_component(entity, row, table, relationships)
+        _append_structure_field(entity, row, table, relationships)
+        _append_enum_value(entity, row)
+
+
+def _apply_table_attributes(entity: dict[str, Any], table: Table) -> None:
+    """Merge table attributes into an entity and promote its browse name."""
+
     entity["attributes"].update(table.attributes)
     if "BrowseName" in table.attributes:
         entity["browse_name"] = table.attributes["BrowseName"]
-    entity_id = entity["id"]
+
+
+def _add_conformance_unit_edges(
+    entity: dict[str, Any], table: Table, relationships: list[dict[str, Any]]
+) -> None:
+    """Attach the table's conformance-unit evidence to its owning entity."""
+
     for unit in table.conformance_units:
-        relationships.append(_edge(entity_id, "HAS_CONFORMANCE_UNIT", f"ConformanceUnit:{unit}", table.section, table.id))
+        relationships.append(
+            _edge(
+                entity["id"],
+                "HAS_CONFORMANCE_UNIT",
+                f"ConformanceUnit:{unit}",
+                table.section,
+                table.id,
+            )
+        )
 
-    for row in table.rows:
-        first = row.get("References") or row.get("Name") or ""
-        supertype = _supertype_from_text(first)
-        if supertype:
-            entity["supertype"] = supertype
-            relationships.append(_edge(entity_id, "HAS_SUBTYPE", _typed_target(supertype, entity["kind"]), table.section, table.id))
-            continue
 
-        if "Reference" in table.table_kind or entity["kind"] == "ReferenceType":
-            _apply_reference_type_row(entity, row, table, relationships)
+def _apply_supertype_row(
+    entity: dict[str, Any], row: dict[str, str], table: Table, relationships: list[dict[str, Any]]
+) -> bool:
+    """Apply a general supertype declaration and signal that the row is complete."""
 
-        if _has_reference_row(row):
-            # Instance declarations become embedded components plus graph nodes whose
-            # IDs retain the owning entity name for later collapse and navigation.
-            item = {
-                "reference_type": row.get("References", ""),
-                "node_class": row.get("NodeClass", ""),
-                "browse_name": row.get("BrowseName", ""),
-                "data_type": row.get("DataType", ""),
-                "type_definition": row.get("TypeDefinition", ""),
-                "modelling_rule": row.get("ModellingRule", ""),
-            }
-            if item["browse_name"]:
-                relation = _relation_for_ref(item["reference_type"])
-                target_kind = item["node_class"] or "Node"
-                target = f"{target_kind}:{entity['name']}.{item['browse_name']}"
-                entity["components"].append(item)
-                entity["references"].append(item)
-                relationships.append(_edge(entity_id, relation, target, table.section, table.id, item))
-                if item["data_type"] and item["data_type"] not in {"-", "--"}:
-                    relationships.append(_edge(target, "USES_DATATYPE", f"DataType:{item['data_type']}", table.section, table.id))
-                if item["type_definition"] and item["type_definition"] not in {"-", "--"}:
-                    relationships.append(_edge(target, "HAS_TYPE_DEFINITION", _guess_type_definition(item["type_definition"]), table.section, table.id))
-                if item["modelling_rule"]:
-                    relationships.append(_edge(target, "HAS_MODELLING_RULE", f"ModellingRule:{item['modelling_rule']}", table.section, table.id))
+    first = row.get("References") or row.get("Name") or ""
+    supertype = _supertype_from_text(first)
+    if not supertype:
+        return False
+    entity["supertype"] = supertype
+    relationships.append(
+        _edge(
+            entity["id"],
+            "HAS_SUBTYPE",
+            _typed_target(supertype, entity["kind"]),
+            table.section,
+            table.id,
+        )
+    )
+    return True
 
-        if _has_structure_field(row):
-            field = {
-                "name": row.get("Name", ""),
-                "type": row.get("Type", ""),
-                "description": row.get("Description", ""),
-            }
-            if field["name"] and field["name"] != entity["name"]:
-                entity["fields"].append(field)
-                relationships.append(_edge(entity_id, "HAS_FIELD", f"Field:{entity['name']}.{field['name']}", table.section, table.id, field))
-                if field["type"]:
-                    relationships.append(_edge(f"Field:{entity['name']}.{field['name']}", "USES_DATATYPE", f"DataType:{field['type']}", table.section, table.id))
 
-        if _has_enum_value(row):
-            value = {
-                "name": row.get("Name", ""),
-                "value": row.get("Value", ""),
-                "description": row.get("Description", ""),
-            }
-            entity["enum_values"].append(value)
+def _append_reference_component(
+    entity: dict[str, Any], row: dict[str, str], table: Table, relationships: list[dict[str, Any]]
+) -> None:
+    """Add an instance declaration and all of its typed relationship evidence."""
+
+    if not _has_reference_row(row):
+        return
+    item = {
+        "reference_type": row.get("References", ""),
+        "node_class": row.get("NodeClass", ""),
+        "browse_name": row.get("BrowseName", ""),
+        "data_type": row.get("DataType", ""),
+        "type_definition": row.get("TypeDefinition", ""),
+        "modelling_rule": row.get("ModellingRule", ""),
+    }
+    if not item["browse_name"]:
+        return
+    relation = _relation_for_ref(item["reference_type"])
+    target_kind = item["node_class"] or "Node"
+    target = f"{target_kind}:{entity['name']}.{item['browse_name']}"
+    entity["components"].append(item)
+    entity["references"].append(item)
+    relationships.append(
+        _edge(entity["id"], relation, target, table.section, table.id, item)
+    )
+    if item["data_type"] and item["data_type"] not in {"-", "--"}:
+        relationships.append(
+            _edge(
+                target,
+                "USES_DATATYPE",
+                f"DataType:{item['data_type']}",
+                table.section,
+                table.id,
+            )
+        )
+    if item["type_definition"] and item["type_definition"] not in {"-", "--"}:
+        relationships.append(
+            _edge(
+                target,
+                "HAS_TYPE_DEFINITION",
+                _guess_type_definition(item["type_definition"]),
+                table.section,
+                table.id,
+            )
+        )
+    if item["modelling_rule"]:
+        relationships.append(
+            _edge(
+                target,
+                "HAS_MODELLING_RULE",
+                f"ModellingRule:{item['modelling_rule']}",
+                table.section,
+                table.id,
+            )
+        )
+
+
+def _append_structure_field(
+    entity: dict[str, Any], row: dict[str, str], table: Table, relationships: list[dict[str, Any]]
+) -> None:
+    """Add a structured DataType field and its optional DataType edge."""
+
+    if not _has_structure_field(row):
+        return
+    field = {
+        "name": row.get("Name", ""),
+        "type": row.get("Type", ""),
+        "description": row.get("Description", ""),
+    }
+    if not field["name"] or field["name"] == entity["name"]:
+        return
+    field_id = f"Field:{entity['name']}.{field['name']}"
+    entity["fields"].append(field)
+    relationships.append(
+        _edge(entity["id"], "HAS_FIELD", field_id, table.section, table.id, field)
+    )
+    if field["type"]:
+        relationships.append(
+            _edge(
+                field_id,
+                "USES_DATATYPE",
+                f"DataType:{field['type']}",
+                table.section,
+                table.id,
+            )
+        )
+
+
+def _append_enum_value(entity: dict[str, Any], row: dict[str, str]) -> None:
+    """Add one enumeration value when a row matches the enum table shape."""
+
+    if not _has_enum_value(row):
+        return
+    entity["enum_values"].append(
+        {
+            "name": row.get("Name", ""),
+            "value": row.get("Value", ""),
+            "description": row.get("Description", ""),
+        }
+    )
 
 
 def _apply_reference_type_row(entity: dict[str, Any], row: dict[str, str], table: Table, relationships: list[dict[str, Any]]) -> None:
@@ -674,22 +772,20 @@ def _split_datatype_type_definition(value: str) -> tuple[str, str]:
 def _entity_kind(section: str, title: str) -> str | None:
     """Infer an OPC UA entity kind from its section family and heading text."""
 
-    if section.startswith("6.4.") and section.count(".") >= 2 and title.endswith("Type"):
-        return "EventType"
-    if section.startswith("6.") and section.count(".") >= 1 and title.endswith(("Type", "definition", "Definition")):
-        return "ObjectType"
-    if section.startswith("7.") and section.count(".") >= 1 and title.endswith("Type"):
-        return "VariableType"
-    if section.startswith("8.4.") and section.count(".") >= 2:
-        return "ModellingRule"
-    if section.startswith("8.") and section.count(".") >= 1:
-        return "Object"
-    if section.startswith("9.") and section.count(".") >= 1:
-        return "Method"
-    if section.startswith("11.") and section.count(".") >= 1:
-        return "ReferenceType"
-    if section.startswith("12.") and section.count(".") >= 1:
-        return "DataType"
+    section_depth = section.count(".")
+    title_rules = (
+        ("6.4.", 2, "EventType", title.endswith("Type")),
+        ("6.", 1, "ObjectType", title.endswith(("Type", "definition", "Definition"))),
+        ("7.", 1, "VariableType", title.endswith("Type")),
+        ("8.4.", 2, "ModellingRule", True),
+        ("8.", 1, "Object", True),
+        ("9.", 1, "Method", True),
+        ("11.", 1, "ReferenceType", True),
+        ("12.", 1, "DataType", True),
+    )
+    for prefix, minimum_depth, kind, title_matches in title_rules:
+        if section.startswith(prefix) and section_depth >= minimum_depth and title_matches:
+            return kind
     return None
 
 

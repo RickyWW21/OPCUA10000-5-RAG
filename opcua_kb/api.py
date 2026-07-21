@@ -52,58 +52,8 @@ class KnowledgeBase:
         if len(exact_results) >= top_k:
             return exact_results[:top_k]
 
-        results = exact_results[:]
-        seen = {(r.get("type"), r.get("id")) for r in results}
-        if self.index_path.exists():
-            sql_query = _fts_query(query)
-            conn = sqlite3.connect(self.index_path)
-            conn.row_factory = sqlite3.Row
-            try:
-                rows = conn.execute(
-                    """
-                    SELECT item_type, item_id, title, section, table_number, snippet(search_fts, 5, '[', ']', ' ... ', 18) AS snippet,
-                           bm25(search_fts) AS score
-                    FROM search_fts
-                    WHERE search_fts MATCH ?
-                    ORDER BY rank
-                    LIMIT ?
-                    """,
-                    (sql_query, max(top_k * 4, 20)),
-                ).fetchall()
-            except sqlite3.OperationalError:
-                # Malformed FTS syntax or an older index should still permit a
-                # slower literal search instead of failing the entire query.
-                rows = conn.execute(
-                    """
-                    SELECT item_type, item_id, title, section, table_number, substr(body, 1, 320) AS snippet,
-                           0 AS score
-                    FROM search_fts
-                    WHERE body LIKE ? OR title LIKE ?
-                    LIMIT ?
-                    """,
-                    (f"%{query}%", f"%{query}%", max(top_k * 4, 20)),
-                ).fetchall()
-            finally:
-                conn.close()
-
-            for row in rows:
-                marker = (row["item_type"], row["item_id"])
-                if marker in seen:
-                    continue
-                seen.add(marker)
-                results.append(
-                    {
-                        "type": row["item_type"],
-                        "id": row["item_id"],
-                        "title": row["title"],
-                        "section": row["section"],
-                        "table_number": row["table_number"],
-                        "snippet": row["snippet"],
-                    }
-                )
-                if len(results) >= top_k:
-                    break
-        return results[:top_k]
+        rows = self._search_fts(query, top_k) if self.index_path.exists() else []
+        return _append_unique_search_results(exact_results, rows, top_k)
 
     def relationships(
         self, entity: str, relation: str | None = None, depth: int = 1
@@ -219,6 +169,26 @@ class KnowledgeBase:
         aliases = self._load_aliases()
         return aliases.get(_norm(name))
 
+    def _search_fts(self, query: str, top_k: int) -> list[sqlite3.Row]:
+        """Query FTS and preserve literal matching as a compatibility fallback."""
+
+        try:
+            conn = sqlite3.connect(self.index_path)
+        except sqlite3.Error as exc:
+            raise OSError(f"Unable to open search index: {self.index_path}") from exc
+        conn.row_factory = sqlite3.Row
+        try:
+            try:
+                return _fts_match_rows(conn, _fts_query(query), top_k)
+            except sqlite3.OperationalError:
+                # Malformed FTS syntax or an older index should still permit a
+                # slower literal search instead of failing the entire query.
+                return _literal_match_rows(conn, query, top_k)
+        except sqlite3.Error as exc:
+            raise OSError(f"Unable to query search index: {self.index_path}") from exc
+        finally:
+            conn.close()
+
     def _load_entities(self) -> dict[str, dict[str, Any]]:
         """Load and cache entities keyed by canonical ID on first access."""
 
@@ -263,11 +233,20 @@ def _read_jsonl(path: Path):
 
     if not path.exists():
         return
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                yield json.loads(line)
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            for line_number, line in enumerate(f, start=1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    yield json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(
+                        f"Invalid JSONL record in {path} at line {line_number}"
+                    ) from exc
+    except OSError as exc:
+        raise OSError(f"Unable to read knowledge-base artifact: {path}") from exc
 
 
 def _entity_result(entity: dict[str, Any]) -> dict[str, Any]:
@@ -282,6 +261,69 @@ def _entity_result(entity: dict[str, Any]) -> dict[str, Any]:
         "table_number": ",".join(str(t).replace("table-", "") for t in entity.get("related_tables", [])),
         "snippet": entity.get("summary_zh") or entity.get("summary_en", ""),
     }
+
+
+def _fts_match_rows(
+    conn: sqlite3.Connection, query: str, top_k: int
+) -> list[sqlite3.Row]:
+    """Return ranked FTS rows using the established query and result schema."""
+
+    return conn.execute(
+        """
+        SELECT item_type, item_id, title, section, table_number,
+               snippet(search_fts, 5, '[', ']', ' ... ', 18) AS snippet,
+               bm25(search_fts) AS score
+        FROM search_fts
+        WHERE search_fts MATCH ?
+        ORDER BY rank
+        LIMIT ?
+        """,
+        (query, max(top_k * 4, 20)),
+    ).fetchall()
+
+
+def _literal_match_rows(
+    conn: sqlite3.Connection, query: str, top_k: int
+) -> list[sqlite3.Row]:
+    """Return literal matches when FTS syntax or index behavior is unavailable."""
+
+    return conn.execute(
+        """
+        SELECT item_type, item_id, title, section, table_number,
+               substr(body, 1, 320) AS snippet, 0 AS score
+        FROM search_fts
+        WHERE body LIKE ? OR title LIKE ?
+        LIMIT ?
+        """,
+        (f"%{query}%", f"%{query}%", max(top_k * 4, 20)),
+    ).fetchall()
+
+
+def _append_unique_search_results(
+    exact_results: list[dict[str, Any]], rows: list[sqlite3.Row], top_k: int
+) -> list[dict[str, Any]]:
+    """Append FTS rows after exact matches without duplicating result records."""
+
+    results = exact_results[:]
+    seen = {(result.get("type"), result.get("id")) for result in results}
+    for row in rows:
+        marker = (row["item_type"], row["item_id"])
+        if marker in seen:
+            continue
+        seen.add(marker)
+        results.append(
+            {
+                "type": row["item_type"],
+                "id": row["item_id"],
+                "title": row["title"],
+                "section": row["section"],
+                "table_number": row["table_number"],
+                "snippet": row["snippet"],
+            }
+        )
+        if len(results) >= top_k:
+            break
+    return results[:top_k]
 
 
 def _norm(value: str) -> str:
