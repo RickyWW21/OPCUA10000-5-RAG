@@ -1,3 +1,5 @@
+"""Build structured JSONL records and an FTS5 index from the OPC UA Markdown."""
+
 from __future__ import annotations
 
 import argparse
@@ -21,6 +23,8 @@ TABLE_RE = re.compile(r"^Table\s+(\d+|[A-Z]\.\d+)\s+-\s+(.+?)\s*$")
 
 @dataclass
 class Chapter:
+    """A parsed specification section with source boundaries and linked records."""
+
     id: str
     section: str
     title: str
@@ -36,6 +40,8 @@ class Chapter:
 
 @dataclass
 class Table:
+    """A specification table in both source-preserving and normalized forms."""
+
     id: str
     number: str
     caption: str
@@ -52,6 +58,8 @@ class Table:
 
 
 def build(root: Path, source: Path, rebuild: bool = False) -> dict[str, int]:
+    """Run the complete source-copy, parse, export, and index pipeline."""
+
     root = root.resolve()
     source = source.resolve()
     source_dir = root / "source"
@@ -62,6 +70,7 @@ def build(root: Path, source: Path, rebuild: bool = False) -> dict[str, int]:
     for directory in (source_dir, kb_dir, indexes_dir, tools_dir, exports_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
+    # Keep a provenance copy under the project, but avoid rewriting it when unchanged.
     target_source = source_dir / source.name
     if rebuild or not target_source.exists() or _sha256(source) != _sha256(target_source):
         shutil.copy2(source, target_source)
@@ -73,6 +82,8 @@ def build(root: Path, source: Path, rebuild: bool = False) -> dict[str, int]:
         json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
+    # Later stages enrich earlier records in place: tables attach to chapters and
+    # entity extraction attaches entity IDs back to both chapters and tables.
     chapters = _parse_chapters(lines)
     tables = _parse_tables(lines, chapters)
     entities, relationships, aliases = _extract_entities_and_relationships(chapters, tables, target_source)
@@ -96,6 +107,8 @@ def build(root: Path, source: Path, rebuild: bool = False) -> dict[str, int]:
 
 
 def _metadata(text: str, source: Path, copied_source: Path) -> dict[str, Any]:
+    """Capture source provenance and version metadata for reproducible builds."""
+
     version = _match_value(text, r"Version:\s*([^\n]+)") or ""
     published = _match_value(text, r"Published:\s*([^\n]+)") or ""
     return {
@@ -110,6 +123,8 @@ def _metadata(text: str, source: Path, copied_source: Path) -> dict[str, Any]:
 
 
 def _parse_chapters(lines: list[str]) -> list[Chapter]:
+    """Parse numbered headings and annexes into a nested chapter sequence."""
+
     starts: list[tuple[int, str, str, int]] = []
     for i, line in enumerate(lines, start=1):
         heading = HEADING_RE.match(line)
@@ -147,6 +162,8 @@ def _parse_chapters(lines: list[str]) -> list[Chapter]:
 
 
 def _parse_tables(lines: list[str], chapters: list[Chapter]) -> list[Table]:
+    """Parse table ranges, associate them with chapters, and normalize their rows."""
+
     starts = []
     for i, line in enumerate(lines, start=1):
         match = TABLE_RE.match(line)
@@ -157,6 +174,7 @@ def _parse_tables(lines: list[str], chapters: list[Chapter]) -> list[Table]:
     for idx, (start, number, caption) in enumerate(starts):
         next_table = starts[idx + 1][0] if idx + 1 < len(starts) else len(lines) + 1
         next_heading = _next_heading_after(lines, start)
+        # A table ends at whichever boundary appears first: another table or heading.
         end = min(next_table, next_heading) - 1
         raw_lines = [line for line in lines[start:end] if line.strip()]
         section = _chapter_for_line(chapters, start)
@@ -181,7 +199,11 @@ def _parse_tables(lines: list[str], chapters: list[Chapter]) -> list[Table]:
 def _extract_entities_and_relationships(
     chapters: list[Chapter], tables: list[Table], source_file: Path
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, str]]:
+    """Derive canonical entities, graph edges, and lookup aliases from sections."""
+
     table_by_section: dict[str, list[Table]] = {}
+    # Table rows contain the detailed components, fields, and enum values that enrich
+    # the top-level entities discovered from chapter headings.
     for table in tables:
         if table.section:
             table_by_section.setdefault(table.section, []).append(table)
@@ -243,6 +265,8 @@ def _extract_entities_and_relationships(
 
 
 def _parse_table_rows(table: Table) -> None:
+    """Interpret a table's raw lines with a small attributes/rows state machine."""
+
     lines = table.raw_lines
     if not lines:
         return
@@ -256,6 +280,8 @@ def _parse_table_rows(table: Table) -> None:
             current_header = None
             continue
         if conformance:
+            # Everything after this marker is descriptive conformance-unit evidence,
+            # not another CSV row in the table schema.
             if line.strip() and not TABLE_RE.match(line) and not HEADING_RE.match(line):
                 table.conformance_units.append(line.strip())
             continue
@@ -279,6 +305,8 @@ def _parse_table_rows(table: Table) -> None:
 
 
 def _apply_table_to_entity(entity: dict[str, Any], table: Table, relationships: list[dict[str, Any]]) -> None:
+    """Merge one normalized table into an entity and emit its graph edges."""
+
     entity["attributes"].update(table.attributes)
     if "BrowseName" in table.attributes:
         entity["browse_name"] = table.attributes["BrowseName"]
@@ -298,6 +326,8 @@ def _apply_table_to_entity(entity: dict[str, Any], table: Table, relationships: 
             _apply_reference_type_row(entity, row, table, relationships)
 
         if _has_reference_row(row):
+            # Instance declarations become embedded components plus graph nodes whose
+            # IDs retain the owning entity name for later collapse and navigation.
             item = {
                 "reference_type": row.get("References", ""),
                 "node_class": row.get("NodeClass", ""),
@@ -342,6 +372,8 @@ def _apply_table_to_entity(entity: dict[str, Any], table: Table, relationships: 
 
 
 def _apply_reference_type_row(entity: dict[str, Any], row: dict[str, str], table: Table, relationships: list[dict[str, Any]]) -> None:
+    """Extract ReferenceType inheritance expressed inside a reference table row."""
+
     text = row.get("References", "")
     supertype = _supertype_from_text(text)
     if supertype:
@@ -350,6 +382,8 @@ def _apply_reference_type_row(entity: dict[str, Any], row: dict[str, str], table
 
 
 def _make_chunks(chapters: list[Chapter], tables: list[Table], entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Create bounded retrieval chunks while preserving entity and table links."""
+
     entity_by_section: dict[str, list[str]] = {}
     for entity in entities:
         entity_by_section.setdefault(entity["section"], []).append(entity["id"])
@@ -390,6 +424,10 @@ def _make_chunks(chapters: list[Chapter], tables: list[Table], entities: list[di
 
 
 def _build_fts(path: Path, chapters: list[Chapter], tables: list[Table], entities: list[dict[str, Any]], chunks: list[dict[str, Any]]) -> None:
+    """Rebuild the SQLite FTS5 index from all searchable record types."""
+
+    # The index is derived data; replacing it atomically at build granularity avoids
+    # stale rows when source records disappear between builds.
     if path.exists():
         path.unlink()
     conn = sqlite3.connect(path)
@@ -420,6 +458,8 @@ def _build_fts(path: Path, chapters: list[Chapter], tables: list[Table], entitie
 
 
 def _write_readme(root: Path, metadata: dict[str, Any], chapters: int, tables: int, entities: int, relationships: int) -> None:
+    """Regenerate the project README with source metadata and usage examples."""
+
     readme = f"""# OPC UA 10000-5 结构化实体知识库
 
 数据源：`{metadata['source_path']}`
@@ -548,6 +588,8 @@ def _chapter_for_line(chapters: list[Chapter], line_no: int) -> Chapter | None:
 
 
 def _table_kind(caption: str, raw_lines: list[str]) -> str:
+    """Classify a table using its caption first and header shape second."""
+
     low = caption.lower()
     if "referencetype" in low:
         return "reference_type"
@@ -568,6 +610,8 @@ def _table_kind(caption: str, raw_lines: list[str]) -> str:
 
 
 def _csv_cells(line: str) -> list[str]:
+    """Parse one source CSV line with a conservative malformed-row fallback."""
+
     try:
         return [cell.strip() for cell in next(csv.reader(StringIO(line)))]
     except (csv.Error, StopIteration):
@@ -583,6 +627,8 @@ def _is_header(cells: list[str]) -> bool:
 
 
 def _normalize_columns(cells: list[str]) -> list[str]:
+    """Map source header spelling variants to stable knowledge-base field names."""
+
     normalized = []
     for cell in cells:
         value = re.sub(r"\s+", " ", cell).strip()
@@ -600,6 +646,8 @@ def _normalize_columns(cells: list[str]) -> list[str]:
 
 
 def _row_from_cells(header: list[str], cells: list[str]) -> dict[str, str]:
+    """Align cells to a normalized header, merging overflow into the last column."""
+
     if "DataType" in header and "TypeDefinition" in header and len(cells) == len(header) - 1:
         idx = header.index("DataType")
         source = cells[idx] if idx < len(cells) else ""
@@ -610,6 +658,8 @@ def _row_from_cells(header: list[str], cells: list[str]) -> dict[str, str]:
 
 
 def _split_datatype_type_definition(value: str) -> tuple[str, str]:
+    """Split the specification's combined DataType/TypeDefinition notation."""
+
     value = value.strip()
     if not value:
         return "", ""
@@ -622,6 +672,8 @@ def _split_datatype_type_definition(value: str) -> tuple[str, str]:
 
 
 def _entity_kind(section: str, title: str) -> str | None:
+    """Infer an OPC UA entity kind from its section family and heading text."""
+
     if section.startswith("6.4.") and section.count(".") >= 2 and title.endswith("Type"):
         return "EventType"
     if section.startswith("6.") and section.count(".") >= 1 and title.endswith(("Type", "definition", "Definition")):
@@ -648,6 +700,8 @@ def _entity_name(title: str) -> str:
 
 
 def _looks_like_entity_name(name: str, kind: str) -> bool:
+    """Reject generic headings that match a section family but are not entities."""
+
     if not name or name.lower() in {"general", "overview"}:
         return False
     if kind in {"ObjectType", "VariableType", "EventType"}:
@@ -660,11 +714,15 @@ def _looks_like_entity_name(name: str, kind: str) -> bool:
 
 
 def _summary_zh(name: str, kind: str, section: str, tables: list[Table]) -> str:
+    """Generate the deterministic Chinese summary stored with each entity."""
+
     table_text = f"，关联表格 {', '.join(t.id.replace('table-', 'Table ') for t in tables)}" if tables else ""
     return f"{name} 是 OPC UA 10000-5 信息模型中的 {kind} 实体，定义位置为第 {section} 节{table_text}。"
 
 
 def _summary_en(text: str, name: str, kind: str) -> str:
+    """Choose the first useful source paragraph or a deterministic fallback."""
+
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     for paragraph in paragraphs[1:]:
         if name in paragraph and not paragraph.startswith("Table "):
@@ -673,6 +731,8 @@ def _summary_en(text: str, name: str, kind: str) -> str:
 
 
 def _supertype_from_text(text: str) -> str | None:
+    """Extract the common ``Subtype of`` notation used in definition tables."""
+
     match = re.search(r"Subtype of the\s+([A-Za-z0-9]+)\s+(?:defined|DataType|ReferenceType|ObjectType|VariableType)?", text)
     return match.group(1) if match else None
 
@@ -690,6 +750,8 @@ def _has_enum_value(row: dict[str, str]) -> bool:
 
 
 def _relation_for_ref(ref: str) -> str:
+    """Map OPC UA ReferenceType names to normalized relationship constants."""
+
     mapping = {
         "HasComponent": "HAS_COMPONENT",
         "HasProperty": "HAS_PROPERTY",
@@ -707,6 +769,8 @@ def _typed_target(name: str, source_kind: str) -> str:
 
 
 def _guess_type_definition(value: str) -> str:
+    """Attach the most likely entity-kind prefix to a type definition name."""
+
     if value.endswith("Type"):
         if value in {"PropertyType", "BaseDataVariableType", "BaseVariableType"}:
             return f"VariableType:{value}"
@@ -722,6 +786,8 @@ def _edge(
     table: str | None,
     properties: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Create one relationship record with source evidence and optional properties."""
+
     return {
         "source": source,
         "relation": relation,
@@ -732,6 +798,8 @@ def _edge(
 
 
 def _aliases_for(entity: dict[str, Any]) -> list[str]:
+    """Return canonical and suffix-stripped names accepted by entity lookup."""
+
     name = entity["name"]
     aliases = [name, entity["id"], entity.get("browse_name", "")]
     if name.endswith("Type"):
@@ -751,6 +819,8 @@ def _keywords(title: str, text: str) -> list[str]:
 
 
 def _entity_body(entity: dict[str, Any]) -> str:
+    """Flatten structured entity fields into text consumed by the FTS index."""
+
     parts = [
         entity.get("name", ""),
         entity.get("kind", ""),
@@ -764,6 +834,8 @@ def _entity_body(entity: dict[str, Any]) -> str:
 
 
 def main() -> None:
+    """Parse builder CLI arguments and print counts for the generated artifacts."""
+
     parser = argparse.ArgumentParser(description="Build the OPC UA 10000-5 structured knowledge base.")
     parser.add_argument("--source", default=r"C:\Users\admin\Downloads\OPC-10000-5-v1.05.06.md")
     parser.add_argument("--root", default=".")

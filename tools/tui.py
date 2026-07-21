@@ -1,3 +1,5 @@
+"""Textual terminal interface for searching and exploring the knowledge base."""
+
 from __future__ import annotations
 
 import argparse
@@ -67,6 +69,11 @@ class KnowledgeBaseTUI(App[None]):
     Header {
         background: #005f73;
         color: white;
+    }
+
+    HeaderIcon {
+        width: 10;
+        content-align: center middle;
     }
 
     TabbedContent {
@@ -176,6 +183,8 @@ class KnowledgeBaseTUI(App[None]):
     ]
 
     def __init__(self, root: Path) -> None:
+        """Initialize one API instance and row-key maps shared by TUI events."""
+
         super().__init__()
         self.root = root
         self.kb = KnowledgeBase(root)
@@ -183,7 +192,11 @@ class KnowledgeBaseTUI(App[None]):
         self.relation_results: dict[str, dict[str, Any]] = {}
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=True)
+        """Compose the five workflow tabs and their persistent result panels."""
+
+        # A text label avoids the default palette glyph rendering as a missing
+        # character in terminal fonts with limited Unicode coverage.
+        yield Header(show_clock=True, icon="命令")
         with TabbedContent(initial="search-tab"):
             with TabPane("搜索", id="search-tab"):
                 with Horizontal(classes="toolbar"):
@@ -299,6 +312,8 @@ class KnowledgeBaseTUI(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
+        """Configure dynamic tables after widgets have entered the DOM."""
+
         search_table = self.query_one("#search-results", DataTable)
         search_table.add_columns("类型", "标题", "章节")
         relation_table = self.query_one("#relation-results", DataTable)
@@ -315,6 +330,8 @@ class KnowledgeBaseTUI(App[None]):
         self.notify("Ctrl+F 搜索，Tab 切换控件，Enter 执行，Ctrl+Q 退出", title="快捷键")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Dispatch Enter from each input to the matching workflow action."""
+
         actions = {
             "search-query": self._search,
             "entity-name": self._show_entity,
@@ -327,6 +344,8 @@ class KnowledgeBaseTUI(App[None]):
             action()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Dispatch command buttons without duplicating workflow implementations."""
+
         actions = {
             "search-button": self._search,
             "entity-button": self._show_entity,
@@ -341,6 +360,8 @@ class KnowledgeBaseTUI(App[None]):
             action()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """Resolve stable row keys back to the full search or relationship record."""
+
         key = str(event.row_key.value)
         if event.data_table.id == "search-results":
             item = self.search_results.get(key)
@@ -371,6 +392,8 @@ class KnowledgeBaseTUI(App[None]):
             self._open_linked_search(value)
 
     def _search(self) -> None:
+        """Run a knowledge-base search and populate both result and detail panes."""
+
         query = self.query_one("#search-query", Input).value.strip()
         if not query:
             self.notify("请输入搜索内容。", severity="warning")
@@ -397,6 +420,8 @@ class KnowledgeBaseTUI(App[None]):
         self._set_status(f"搜索完成：{len(results)} 条结果")
 
     def _show_entity(self) -> None:
+        """Resolve the entity input and render its complete structured card."""
+
         name = self.query_one("#entity-name", Input).value.strip()
         if not name:
             self.notify("请输入实体名。", severity="warning")
@@ -411,6 +436,8 @@ class KnowledgeBaseTUI(App[None]):
         self._set_status(f"已加载实体：{entity['name']}")
 
     def _show_relations(self) -> None:
+        """Trace filtered relationships and keep long targets out of table cells."""
+
         entity = self.query_one("#relation-entity", Input).value.strip()
         if not entity:
             self.notify("请输入实体名。", severity="warning")
@@ -441,6 +468,8 @@ class KnowledgeBaseTUI(App[None]):
             self.notify("未找到匹配关系。", severity="warning")
 
     def _show_chapter(self) -> None:
+        """Render a chapter and select the structured document view."""
+
         section = self.query_one("#chapter-number", Input).value.strip()
         chapter = self.kb.chapter(section) if section else None
         target = self.query_one("#docs-detail", Markdown)
@@ -453,6 +482,8 @@ class KnowledgeBaseTUI(App[None]):
         self._set_status(f"已加载章节：{section}")
 
     def _show_table(self) -> None:
+        """Populate structured and conventional views for the requested table."""
+
         number = self.query_one("#table-number", Input).value.strip()
         table = self.kb.table(number) if number else None
         target = self.query_one("#docs-detail", Markdown)
@@ -466,6 +497,8 @@ class KnowledgeBaseTUI(App[None]):
         self._set_status(f"已加载表格：{number}")
 
     def _populate_table_grid(self, table: dict[str, Any]) -> None:
+        """Replace all dynamic columns and rows in the conventional table view."""
+
         columns, rows = table_grid_data(table)
         grid = self.query_one("#table-grid", DataTable)
         grid.clear(columns=True)
@@ -475,6 +508,8 @@ class KnowledgeBaseTUI(App[None]):
             grid.add_row(*(format_table_cell(value) for value in row))
 
     def _generate_graph(self, open_after: bool) -> None:
+        """Build the selected graph format and optionally open an HTML export."""
+
         focus = self.query_one("#graph-focus", Input).value.strip() or None
         relation = self.query_one("#graph-relation", Input).value.strip() or None
         depth = int(self.query_one("#graph-depth", Select).value)
@@ -487,6 +522,8 @@ class KnowledgeBaseTUI(App[None]):
         output = Path(output_text)
         if not output.is_absolute():
             output = self.root / output
+        # Keep the selected format and filename extension consistent even when the
+        # user edits a path left over from the other format.
         expected_suffix = f".{output_format}"
         if output.suffix.lower() != expected_suffix:
             output = output.with_suffix(expected_suffix)
@@ -527,6 +564,8 @@ class KnowledgeBaseTUI(App[None]):
                 self.notify("只有 HTML 图谱可以直接在浏览器中打开。", severity="warning")
 
     def _format_search_result(self, item: dict[str, Any]) -> str:
+        """Render an entity card when possible, otherwise a generic result summary."""
+
         if item.get("type") == "entity":
             entity = self.kb.get_entity(str(item.get("id", "")))
             if entity:
@@ -591,6 +630,8 @@ class KnowledgeBaseTUI(App[None]):
         return internal_link(label, "search", relation_search_term(entity_id))
 
     def _target_link(self, target: str) -> str:
+        """Choose entity, chapter, table, or search navigation for a target ID."""
+
         entity = self.kb.get_entity(target)
         if entity:
             return internal_link(str(entity.get("name") or target), "entity", target)
@@ -617,6 +658,8 @@ class KnowledgeBaseTUI(App[None]):
         return None
 
     def _open_linked_entity(self, entity_id: str) -> None:
+        """Load an internal entity link and transfer focus to the entity tab."""
+
         entity = self.kb.get_entity(entity_id)
         if not entity:
             self.notify(f"未找到实体：{entity_id}", severity="warning")
@@ -650,6 +693,8 @@ class KnowledgeBaseTUI(App[None]):
 
 
 def format_entity(entity: dict[str, Any]) -> str:
+    """Render one entity record as a readable Markdown detail document."""
+
     lines = [f"## {entity.get('name', entity.get('id', '实体'))}"]
     lines.extend(
         [
@@ -699,6 +744,8 @@ def compact_entity_name(entity_id: str) -> str:
 
 
 def compact_relation_target(target: str, limit: int = 52) -> str:
+    """Create a single-line target preview without losing the full stored value."""
+
     compact = " ".join(target.split())
     if ":" in compact:
         compact = compact.split(":", 1)[1]
@@ -708,6 +755,8 @@ def compact_relation_target(target: str, limit: int = 52) -> str:
 
 
 def relation_search_term(target: str) -> str:
+    """Extract a bounded, useful fallback query from an unresolved target ID."""
+
     value = target.split(":", 1)[-1]
     if "." in value and len(value) < 160:
         value = value.rsplit(".", 1)[-1]
@@ -721,6 +770,8 @@ def internal_link(label: str, kind: str, value: str) -> str:
 
 
 def escape_markdown(value: str) -> str:
+    """Escape user/data-controlled text used inside generated Markdown."""
+
     escaped = value.replace("\\", "\\\\")
     for character in ("`", "*", "_", "[", "]", "<", ">"):
         escaped = escaped.replace(character, f"\\{character}")
@@ -728,6 +779,8 @@ def escape_markdown(value: str) -> str:
 
 
 def format_chapter(chapter: dict[str, Any]) -> str:
+    """Render chapter metadata and source text as Markdown."""
+
     title = chapter.get("title") or chapter.get("section") or "章节"
     lines = [f"## {chapter.get('section', '')} {title}".strip()]
     path = chapter.get("path") or []
@@ -778,6 +831,8 @@ def table_grid_data(table: dict[str, Any]) -> tuple[list[str], list[list[Any]]]:
 
 
 def format_table_cell(value: Any) -> str:
+    """Convert scalar or nested structured values to DataTable-safe text."""
+
     if value is None:
         return ""
     if isinstance(value, (dict, list, tuple)):
@@ -786,6 +841,8 @@ def format_table_cell(value: Any) -> str:
 
 
 def format_table(table: dict[str, Any]) -> str:
+    """Render the source-preserving structured view of a table."""
+
     lines = [f"## 表 {table.get('number', '')}：{table.get('caption', '')}"]
     lines.append(f"\n- ID：`{table.get('id', '-')}`")
     lines.append(f"- 章节：`{table.get('section', '-')}`")
@@ -809,6 +866,8 @@ def _best_summary(entity: dict[str, Any]) -> str:
 
 
 def main() -> None:
+    """Validate the project root and launch the terminal application."""
+
     parser = argparse.ArgumentParser(description="启动 OPC UA 10000-5 知识库 TUI。")
     parser.add_argument("--root", default=str(ROOT), help="知识库项目根目录。")
     args = parser.parse_args()

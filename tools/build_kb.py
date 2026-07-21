@@ -1,3 +1,5 @@
+"""Repository-local CLI wrapper for the knowledge-base builder."""
+
 from __future__ import annotations
 
 import sys

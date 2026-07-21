@@ -1,3 +1,5 @@
+"""Executable smoke coverage for every supported public Python API workflow."""
+
 from __future__ import annotations
 
 import argparse
@@ -16,6 +18,8 @@ from opcua_kb import KnowledgeBase, write_graph_html, write_graph_json
 
 
 def main() -> None:
+    """Run all API checks and write disposable graph exports."""
+
     configure_console_encoding()
 
     parser = argparse.ArgumentParser(

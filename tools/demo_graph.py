@@ -1,3 +1,5 @@
+"""Generate a small focused HTML graph and print a terminal summary."""
+
 from __future__ import annotations
 
 import argparse
@@ -13,6 +15,8 @@ from opcua_kb import KnowledgeBase, write_graph_html
 
 
 def main() -> None:
+    """Parse demo options, export the graph, and optionally open it."""
+
     parser = argparse.ArgumentParser(
         description="Demo the OPC UA 10000-5 knowledge graph feature. 演示知识图谱功能。",
         epilog=(
@@ -61,6 +65,8 @@ def main() -> None:
 
 
 def _safe_name(value: str) -> str:
+    """Convert an entity focus into a portable export filename segment."""
+
     return "".join(ch if ch.isalnum() else "_" for ch in value).strip("_") or "knowledge"
 
 

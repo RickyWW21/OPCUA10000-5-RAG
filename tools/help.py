@@ -1,3 +1,5 @@
+"""Print the consolidated bilingual command and Python API reference."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -123,6 +125,8 @@ Notes / 注意事项
 
 
 def main() -> None:
+    """Print the static project help text."""
+
     print(HELP_TEXT)
 
 

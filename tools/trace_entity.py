@@ -1,3 +1,5 @@
+"""CLI for traversing outgoing relationships from one entity."""
+
 from __future__ import annotations
 
 import argparse
@@ -12,6 +14,8 @@ from opcua_kb import KnowledgeBase
 
 
 def main() -> None:
+    """Trace optionally filtered relationships and print their source evidence."""
+
     parser = argparse.ArgumentParser(
         description="Trace OPC UA 10000-5 entity relationships. 追踪 OPC UA 10000-5 实体关系。",
         epilog=(

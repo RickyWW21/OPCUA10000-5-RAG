@@ -1,3 +1,5 @@
+"""CLI for exporting filtered or global knowledge graphs as HTML or JSON."""
+
 from __future__ import annotations
 
 import argparse
@@ -13,6 +15,8 @@ from opcua_kb import KnowledgeBase, write_graph_html, write_graph_json
 
 
 def main() -> None:
+    """Parse graph filters, build the graph payload, and write the export."""
+
     parser = argparse.ArgumentParser(
         description="Build an OPC UA 10000-5 knowledge graph. 生成 OPC UA 10000-5 知识图谱。",
         epilog=(

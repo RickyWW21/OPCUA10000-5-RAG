@@ -1,3 +1,5 @@
+"""Aggregate relationships and render offline OPC UA knowledge-graph exports."""
+
 from __future__ import annotations
 
 import html
@@ -99,6 +101,8 @@ def build_knowledge_graph(
         )
     ranked_edges.sort(key=lambda item: item["weight"], reverse=True)
 
+    # Scope traversal happens after component IDs are collapsed, matching the nodes
+    # that users actually see rather than transient field/component identifiers.
     seed_ids = _resolve_focus_ids(focus, entities) if focus else set(entity_by_id)
     scoped_nodes = _scope_collapsed_nodes(seed_ids, ranked_edges, depth) if focus else set(entity_by_id)
     scoped_edges = [
@@ -109,6 +113,7 @@ def build_knowledge_graph(
             edge for edge in scoped_edges if edge["source"] in seed_ids or edge["target"] in seed_ids
         ]
 
+    # Ranking keeps focus nodes first, then favors direct and globally strong links.
     degrees: Counter[str] = Counter()
     direct_scores: Counter[str] = Counter()
     for edge in scoped_edges:
@@ -160,11 +165,15 @@ def build_knowledge_graph(
 
 
 def write_graph_json(graph: dict[str, Any], path: Path) -> None:
+    """Write a graph payload as human-readable UTF-8 JSON."""
+
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(graph, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def write_graph_html(graph: dict[str, Any], path: Path) -> None:
+    """Write a self-contained interactive graph page to disk."""
+
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render_graph_html(graph), encoding="utf-8")
 
@@ -176,6 +185,8 @@ def render_graph_html(graph: dict[str, Any]) -> str:
 
 
 def _render_interactive_graph_html(graph: dict[str, Any]) -> str:
+    """Render SVG markup and browser-side pan, zoom, drag, and detail behavior."""
+
     nodes = graph.get("nodes", [])
     edges = graph.get("edges", [])
     width = 2400
@@ -188,6 +199,8 @@ def _render_interactive_graph_html(graph: dict[str, Any]) -> str:
     max_weight = max([edge.get("weight", 1) for edge in edges] or [1])
     max_score = max([node.get("score", 1) for node in nodes] or [1])
 
+    # Geometry is rendered server-side; JavaScript only mutates transforms and edge
+    # endpoints during interaction, so the file remains useful without a web server.
     edge_svg = []
     for edge in edges:
         if edge["source"] not in positions or edge["target"] not in positions:
@@ -326,6 +339,7 @@ def _render_interactive_graph_html(graph: dict[str, Any]) -> str:
     const positions = JSON.parse(document.getElementById("graph-positions").textContent);
     const nodes = Array.from(document.querySelectorAll(".node"));
     const edges = Array.from(document.querySelectorAll(".edge"));
+    // View translation and scale are independent from model-space node positions.
     const view = {{ x: 0, y: 0, scale: 1 }};
     let interaction = null;
 
@@ -345,6 +359,7 @@ def _render_interactive_graph_html(graph: dict[str, Any]) -> str:
     }}
 
     function setNodePosition(id, x, y) {{
+      // A dragged node owns both its transform and every connected edge endpoint.
       positions[id] = {{ x, y }};
       const node = document.querySelector(`.node[data-id="${{CSS.escape(id)}}"]`);
       if (node) node.setAttribute("transform", `translate(${{x}} ${{y}})`);
@@ -402,6 +417,7 @@ def _render_interactive_graph_html(graph: dict[str, Any]) -> str:
     }}
 
     function zoomAt(clientX, clientY, factor) {{
+      // Recalculate translation so the graph point under the pointer stays fixed.
       const before = eventPoint({{ clientX, clientY }});
       view.scale = Math.max(0.12, Math.min(8, view.scale * factor));
       const after = eventPoint({{ clientX, clientY }});
@@ -411,6 +427,7 @@ def _render_interactive_graph_html(graph: dict[str, Any]) -> str:
     }}
 
     function fitView() {{
+      // Fit model-space bounds into the fixed SVG viewBox with label padding.
       const values = Object.values(positions);
       if (!values.length) return;
       const xs = values.map(item => item.x);
@@ -499,6 +516,8 @@ def _render_interactive_graph_html(graph: dict[str, Any]) -> str:
 
 
 def _render_static_graph_html(graph: dict[str, Any]) -> str:
+    """Retain the non-interactive renderer for simple or legacy consumers."""
+
     nodes = graph.get("nodes", [])
     edges = graph.get("edges", [])
     width = 1920
@@ -604,6 +623,8 @@ def _render_static_graph_html(graph: dict[str, Any]) -> str:
 
 
 def _resolve_focus_ids(focus: str | None, entities: list[dict[str, Any]]) -> set[str]:
+    """Resolve a graph focus by exact ID or normalized entity name."""
+
     if not focus:
         return set()
     normalized = _norm(focus)
@@ -619,6 +640,8 @@ def _scope_collapsed_nodes(
     edges: list[dict[str, Any]],
     depth: int,
 ) -> set[str]:
+    """Collect nodes reachable from the focus set within the requested depth."""
+
     scoped = set(seeds)
     frontier = set(seeds)
     for _ in range(max(depth, 1)):
@@ -677,11 +700,15 @@ def _collapse_node(node_id: str | None, entity_by_id: dict[str, dict[str, Any]])
 
 
 def _is_low_value_external(node_id: str) -> bool:
+    """Identify parser artifacts that should not become visible graph nodes."""
+
     value = node_id.lower().replace(" ", "")
     return value in {"-", "--"} or value.startswith("datatype:definedin") or value.startswith("definedin")
 
 
 def _node_payload(node_id: str, entity_by_id: dict[str, dict[str, Any]], score: int) -> dict[str, Any]:
+    """Build display metadata for either a known entity or an external node."""
+
     entity = entity_by_id.get(node_id)
     if entity:
         return {

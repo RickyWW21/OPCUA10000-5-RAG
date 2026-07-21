@@ -1,3 +1,5 @@
+"""CLI for printing one complete structured entity record."""
+
 from __future__ import annotations
 
 import argparse
@@ -12,6 +14,8 @@ from opcua_kb import KnowledgeBase
 
 
 def main() -> None:
+    """Resolve an entity name or ID and print its structured details."""
+
     parser = argparse.ArgumentParser(
         description="Inspect one OPC UA 10000-5 entity. 查看单个 OPC UA 10000-5 实体。",
         epilog=(

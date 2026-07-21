@@ -1,3 +1,5 @@
+"""CLI for exact and full-text knowledge-base searches."""
+
 from __future__ import annotations
 
 import argparse
@@ -12,6 +14,8 @@ from opcua_kb import KnowledgeBase
 
 
 def main() -> None:
+    """Run a query and print ranked results with optional structure details."""
+
     parser = argparse.ArgumentParser(
         description="Search the OPC UA 10000-5 knowledge base. 检索 OPC UA 10000-5 知识库。",
         epilog=(
@@ -45,11 +49,15 @@ def main() -> None:
 
 
 def _wants_structure(query: str) -> bool:
+    """Detect whether the query asks for components, fields, or containment."""
+
     markers = ["组件", "字段", "包含", "有哪些", "components", "fields", "contain"]
     return any(marker.lower() in query.lower() for marker in markers)
 
 
 def _print_structure(entity: dict) -> None:
+    """Print the bounded component, field, and enum sections of an entity."""
+
     components = entity.get("components") or []
     fields = entity.get("fields") or []
     enum_values = entity.get("enum_values") or []

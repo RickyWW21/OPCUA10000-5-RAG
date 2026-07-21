@@ -1,3 +1,5 @@
+"""Convenience launcher for ``tools/tui.py`` from the repository root."""
+
 from __future__ import annotations
 
 import runpy

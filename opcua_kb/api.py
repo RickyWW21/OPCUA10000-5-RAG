@@ -1,3 +1,5 @@
+"""Lazy, read-only access to the generated knowledge-base artifacts."""
+
 from __future__ import annotations
 
 import json
@@ -14,6 +16,8 @@ class KnowledgeBase:
     """Read-only facade over the generated JSONL records and SQLite FTS index."""
 
     def __init__(self, root: str | Path):
+        """Point the API at a project root containing ``kb/`` and ``indexes/``."""
+
         self.root = Path(root)
         self.kb_dir = self.root / "kb"
         self.index_path = self.root / "indexes" / "fts.sqlite"
@@ -24,6 +28,8 @@ class KnowledgeBase:
         self._relationships: list[dict[str, Any]] | None = None
 
     def get_entity(self, name: str) -> dict[str, Any] | None:
+        """Resolve an entity by ID, normalized alias, or case-insensitive name."""
+
         entities = self._load_entities()
         aliases = self._load_aliases()
         key = aliases.get(_norm(name), name)
@@ -65,6 +71,8 @@ class KnowledgeBase:
                     (sql_query, max(top_k * 4, 20)),
                 ).fetchall()
             except sqlite3.OperationalError:
+                # Malformed FTS syntax or an older index should still permit a
+                # slower literal search instead of failing the entire query.
                 rows = conn.execute(
                     """
                     SELECT item_type, item_id, title, section, table_number, substr(body, 1, 320) AS snippet,
@@ -128,9 +136,13 @@ class KnowledgeBase:
         return results
 
     def chapter(self, section: str) -> dict[str, Any] | None:
+        """Return one chapter by its specification section number."""
+
         return self._load_chapters().get(section)
 
     def table(self, number: int | str) -> dict[str, Any] | None:
+        """Return one table by numeric or annex-style identifier such as ``C.1``."""
+
         return self._load_tables().get(str(number).lower())
 
     def graph(
@@ -156,6 +168,8 @@ class KnowledgeBase:
         )
 
     def _exact_search(self, query: str) -> list[dict[str, Any]]:
+        """Extract deterministic entity, table, and chapter matches from a query."""
+
         results: list[dict[str, Any]] = []
         entity = self.get_entity(query)
         if entity:
@@ -197,6 +211,8 @@ class KnowledgeBase:
         return results
 
     def _resolve_entity_id(self, name: str) -> str | None:
+        """Normalize a user-facing entity name to the canonical relationship ID."""
+
         entity = self.get_entity(name)
         if entity:
             return entity["id"]
@@ -204,6 +220,8 @@ class KnowledgeBase:
         return aliases.get(_norm(name))
 
     def _load_entities(self) -> dict[str, dict[str, Any]]:
+        """Load and cache entities keyed by canonical ID on first access."""
+
         if self._entities is None:
             self._entities = {}
             for item in _read_jsonl(self.kb_dir / "entities.jsonl"):
@@ -211,28 +229,38 @@ class KnowledgeBase:
         return self._entities
 
     def _load_aliases(self) -> dict[str, str]:
+        """Load and cache normalized aliases on first access."""
+
         if self._aliases is None:
             path = self.kb_dir / "aliases.json"
             self._aliases = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
         return self._aliases
 
     def _load_chapters(self) -> dict[str, dict[str, Any]]:
+        """Load and cache chapters keyed by section number on first access."""
+
         if self._chapters is None:
             self._chapters = {item["section"]: item for item in _read_jsonl(self.kb_dir / "chapters.jsonl")}
         return self._chapters
 
     def _load_tables(self) -> dict[str, dict[str, Any]]:
+        """Load and cache tables using lowercase string identifiers."""
+
         if self._tables is None:
             self._tables = {str(item["number"]).lower(): item for item in _read_jsonl(self.kb_dir / "tables.jsonl")}
         return self._tables
 
     def _load_relationships(self) -> list[dict[str, Any]]:
+        """Load and cache the ordered relationship records on first access."""
+
         if self._relationships is None:
             self._relationships = list(_read_jsonl(self.kb_dir / "relationships.jsonl"))
         return self._relationships
 
 
 def _read_jsonl(path: Path):
+    """Yield decoded JSONL records; a missing optional artifact is empty."""
+
     if not path.exists():
         return
     with path.open("r", encoding="utf-8") as f:
@@ -243,6 +271,8 @@ def _read_jsonl(path: Path):
 
 
 def _entity_result(entity: dict[str, Any]) -> dict[str, Any]:
+    """Project a full entity record into the common search-result schema."""
+
     return {
         "type": "entity",
         "id": entity["id"],
@@ -259,11 +289,15 @@ def _norm(value: str) -> str:
 
 
 def _candidate_tokens(query: str) -> list[str]:
+    """Extract likely OPC UA identifiers for exact lookup before FTS."""
+
     tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]*(?:Type|DataType|ReferenceType)?", query)
     return sorted(set(tokens), key=len, reverse=True)
 
 
 def _fts_query(query: str) -> str:
+    """Convert free text into a bounded FTS5 OR expression."""
+
     tokens = re.findall(r"[\w\u4e00-\u9fff]+", query, flags=re.UNICODE)
     if not tokens:
         return query.replace('"', '""')
