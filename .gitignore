@@ -9,3 +9,4 @@ env/
 exports/
 *.md
 docs/
+.worktrees/
