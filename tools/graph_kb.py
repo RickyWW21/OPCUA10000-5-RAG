@@ -12,6 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from opcua_kb import KnowledgeBase, write_graph_html, write_graph_json
+from opcua_kb.cli import run_cli
 
 
 def main() -> None:
@@ -51,7 +52,9 @@ def main() -> None:
         help="Output path. Defaults to exports/knowledge_graph.html or exports/knowledge_graph.json.",
     )
     args = parser.parse_args()
+    return run_cli(lambda: _run(args))
 
+def _run(args: argparse.Namespace) -> None:
     root = Path(args.root)
     kb = KnowledgeBase(root)
     limit = 0 if args.all else args.limit
@@ -66,22 +69,15 @@ def main() -> None:
     output = Path(args.output) if args.output else root / "exports" / f"knowledge_graph.{args.format}"
     if not output.is_absolute():
         output = root / output
-
     if args.format == "json":
         write_graph_json(graph, output)
     else:
         write_graph_html(graph, output)
-
     print(f"Graph written: {output}")
     print(f"Nodes: {graph['metadata']['node_count']}")
     print(f"Edges: {graph['metadata']['edge_count']}")
-
     if args.format == "json":
-        preview = {
-            "metadata": graph["metadata"],
-            "top_nodes": graph["nodes"][:8],
-            "top_edges": graph["edges"][:8],
-        }
+        preview = {"metadata": graph["metadata"], "top_nodes": graph["nodes"][:8], "top_edges": graph["edges"][:8]}
         print(json.dumps(preview, ensure_ascii=False, indent=2))
 
 

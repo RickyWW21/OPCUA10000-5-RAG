@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from opcua_kb import KnowledgeBase
+from opcua_kb.cli import run_cli
 
 
 def main() -> None:
@@ -30,23 +31,7 @@ def main() -> None:
     parser.add_argument("--top-k", type=int, default=10, help="Maximum number of results to print. Default: 10.")
     parser.add_argument("--root", default=str(ROOT), help="Knowledge base project root. Default: repository root.")
     args = parser.parse_args()
-
-    kb = KnowledgeBase(args.root)
-    results = kb.search(args.query, top_k=args.top_k)
-    for idx, item in enumerate(results, start=1):
-        print(f"[{idx}] {item.get('type')} {item.get('title')} ({item.get('id')})")
-        if item.get("section"):
-            print(f"    章节: {item.get('section')}")
-        if item.get("table_number"):
-            print(f"    表格: {item.get('table_number')}")
-        snippet = (item.get("snippet") or "").replace("\n", " ")
-        if snippet:
-            print(f"    摘要: {snippet[:600]}")
-        if item.get("type") == "entity" and _wants_structure(args.query):
-            entity = kb.get_entity(item["id"])
-            if entity:
-                _print_structure(entity)
-
+    return run_cli(lambda: _run(args))
 
 def _wants_structure(query: str) -> bool:
     """Detect whether the query asks for components, fields, or containment."""
@@ -77,6 +62,24 @@ def _print_structure(entity: dict) -> None:
         print("    枚举值:")
         for item in enum_values[:20]:
             print(f"      - {item.get('name')}={item.get('value')} - {item.get('description')}")
+
+
+def _run(args: argparse.Namespace) -> None:
+    kb = KnowledgeBase(args.root)
+    results = kb.search(args.query, top_k=args.top_k)
+    for idx, item in enumerate(results, start=1):
+        print(f"[{idx}] {item.get('type')} {item.get('title')} ({item.get('id')})")
+        if item.get("section"):
+            print(f"    章节: {item.get('section')}")
+        if item.get("table_number"):
+            print(f"    表格: {item.get('table_number')}")
+        snippet = (item.get("snippet") or "").replace("\n", " ")
+        if snippet:
+            print(f"    摘要: {snippet[:600]}")
+        if item.get("type") == "entity" and _wants_structure(args.query):
+            entity = kb.get_entity(item["id"])
+            if entity:
+                _print_structure(entity)
 
 
 if __name__ == "__main__":

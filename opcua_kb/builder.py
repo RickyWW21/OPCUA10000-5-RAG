@@ -68,19 +68,20 @@ def build(root: Path, source: Path, rebuild: bool = False) -> dict[str, int]:
     tools_dir = root / "tools"
     exports_dir = root / "exports"
     for directory in (source_dir, kb_dir, indexes_dir, tools_dir, exports_dir):
-        directory.mkdir(parents=True, exist_ok=True)
+        _make_directory(directory)
 
     # Keep a provenance copy under the project, but avoid rewriting it when unchanged.
     target_source = source_dir / source.name
-    if rebuild or not target_source.exists() or _sha256(source) != _sha256(target_source):
-        shutil.copy2(source, target_source)
+    source_hash = _read_source_hash(source)
+    if rebuild or not target_source.exists() or source_hash != _read_source_hash(target_source):
+        _copy_source(source, target_source)
 
-    text = source.read_text(encoding="utf-8")
+    text = _read_source_text(source)
     lines = text.splitlines()
-    metadata = _metadata(text, source, target_source)
-    (source_dir / "source_manifest.json").write_text(
-        json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    metadata = _metadata(text, source, target_source, source_hash)
+    manifest_path = source_dir / "source_manifest.json"
+    manifest = json.dumps(metadata, ensure_ascii=False, indent=2)
+    _write_text(manifest_path, manifest, "write source manifest")
 
     # Later stages enrich earlier records in place: tables attach to chapters and
     # entity extraction attaches entity IDs back to both chapters and tables.
@@ -94,7 +95,9 @@ def build(root: Path, source: Path, rebuild: bool = False) -> dict[str, int]:
     _write_jsonl(kb_dir / "entities.jsonl", entities)
     _write_jsonl(kb_dir / "relationships.jsonl", relationships)
     _write_jsonl(kb_dir / "chunks.jsonl", chunks)
-    (kb_dir / "aliases.json").write_text(json.dumps(aliases, ensure_ascii=False, indent=2), encoding="utf-8")
+    aliases_path = kb_dir / "aliases.json"
+    aliases_json = json.dumps(aliases, ensure_ascii=False, indent=2)
+    _write_text(aliases_path, aliases_json, "write aliases artifact")
     _build_fts(indexes_dir / "fts.sqlite", chapters, tables, entities, chunks)
     _write_readme(root, metadata, len(chapters), len(tables), len(entities), len(relationships))
     return {
@@ -106,7 +109,7 @@ def build(root: Path, source: Path, rebuild: bool = False) -> dict[str, int]:
     }
 
 
-def _metadata(text: str, source: Path, copied_source: Path) -> dict[str, Any]:
+def _metadata(text: str, source: Path, copied_source: Path, source_hash: str) -> dict[str, Any]:
     """Capture source provenance and version metadata for reproducible builds."""
 
     version = _match_value(text, r"Version:\s*([^\n]+)") or ""
@@ -118,7 +121,7 @@ def _metadata(text: str, source: Path, copied_source: Path) -> dict[str, Any]:
         "published": published.strip(),
         "source_path": str(source),
         "local_source_path": str(copied_source),
-        "sha256": _sha256(source),
+        "sha256": source_hash,
     }
 
 
@@ -526,33 +529,63 @@ def _build_fts(path: Path, chapters: list[Chapter], tables: list[Table], entitie
 
     # The index is derived data; replacing it atomically at build granularity avoids
     # stale rows when source records disappear between builds.
-    if path.exists():
-        path.unlink()
-    conn = sqlite3.connect(path)
-    conn.execute(
-        """
-        CREATE VIRTUAL TABLE search_fts USING fts5(
-            item_type,
-            item_id,
-            title,
-            section,
-            table_number,
-            body
+    _prepare_fts_path(path)
+    conn = _connect_fts(path)
+    try:
+        _create_fts_schema(conn, path)
+        rows = []
+        for entity in entities:
+            rows.append(("entity", entity["id"], entity["name"], entity.get("section", ""), ",".join(entity.get("related_tables", [])), _entity_body(entity)))
+        for chapter in chapters:
+            rows.append(("chapter", chapter.id, chapter.title, chapter.section, ",".join(chapter.tables), chapter.text))
+        for table in tables:
+            rows.append(("table", table.id, table.caption, table.section or "", str(table.number), "\n".join(table.raw_lines)))
+        for chunk in chunks:
+            rows.append(("chunk", chunk["id"], " / ".join(chunk.get("heading_path", [])) or chunk["id"], chunk.get("section") or "", ",".join(chunk.get("table_ids", [])), chunk["text"]))
+        _write_fts_rows(conn, path, rows)
+    finally:
+        conn.close()
+
+
+def _prepare_fts_path(path: Path) -> None:
+    try:
+        if path.exists():
+            path.unlink()
+    except OSError as exc:
+        raise OSError(f"Unable to prepare FTS index at {path}") from exc
+
+
+def _connect_fts(path: Path) -> sqlite3.Connection:
+    try:
+        return sqlite3.connect(path)
+    except (OSError, sqlite3.Error) as exc:
+        raise OSError(f"Unable to open FTS index at {path}") from exc
+
+
+def _create_fts_schema(connection: sqlite3.Connection, path: Path) -> None:
+    try:
+        connection.execute(
+            """
+            CREATE VIRTUAL TABLE search_fts USING fts5(
+                item_type,
+                item_id,
+                title,
+                section,
+                table_number,
+                body
+            )
+            """
         )
-        """
-    )
-    rows = []
-    for entity in entities:
-        rows.append(("entity", entity["id"], entity["name"], entity.get("section", ""), ",".join(entity.get("related_tables", [])), _entity_body(entity)))
-    for chapter in chapters:
-        rows.append(("chapter", chapter.id, chapter.title, chapter.section, ",".join(chapter.tables), chapter.text))
-    for table in tables:
-        rows.append(("table", table.id, table.caption, table.section or "", str(table.number), "\n".join(table.raw_lines)))
-    for chunk in chunks:
-        rows.append(("chunk", chunk["id"], " / ".join(chunk.get("heading_path", [])) or chunk["id"], chunk.get("section") or "", ",".join(chunk.get("table_ids", [])), chunk["text"]))
-    conn.executemany("INSERT INTO search_fts(item_type,item_id,title,section,table_number,body) VALUES(?,?,?,?,?,?)", rows)
-    conn.commit()
-    conn.close()
+    except (OSError, sqlite3.Error) as exc:
+        raise OSError(f"Unable to set up FTS index at {path}") from exc
+
+
+def _write_fts_rows(connection: sqlite3.Connection, path: Path, rows: list[tuple[Any, ...]]) -> None:
+    try:
+        connection.executemany("INSERT INTO search_fts(item_type,item_id,title,section,table_number,body) VALUES(?,?,?,?,?,?)", rows)
+        connection.commit()
+    except (OSError, sqlite3.Error) as exc:
+        raise OSError(f"Unable to write FTS index at {path}") from exc
 
 
 def _write_readme(root: Path, metadata: dict[str, Any], chapters: int, tables: int, entities: int, relationships: int) -> None:
@@ -638,13 +671,54 @@ python tools/graph_kb.py --relation HAS_COMPONENT,USES_DATATYPE --min-weight 3 -
 
 图谱中的节点代表实体，边代表实体之间的关系。边的 `weight` 是聚合后的关联度，数值越大表示两个实体之间通过更多或更强的关系连接。
 """
-    (root / "README.md").write_text(readme, encoding="utf-8")
+    _write_text(root / "README.md", readme, "write README")
 
 
 def _write_jsonl(path: Path, items: list[dict[str, Any]]) -> None:
-    with path.open("w", encoding="utf-8", newline="\n") as f:
-        for item in items:
-            f.write(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n")
+    try:
+        with path.open("w", encoding="utf-8", newline="\n") as f:
+            for item in items:
+                line = json.dumps(item, ensure_ascii=False, sort_keys=True)
+                f.write(line + "\n")
+    except OSError as exc:
+        raise OSError(f"Unable to write JSONL artifact at {path}") from exc
+
+
+def _make_directory(path: Path) -> None:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise OSError(f"Unable to create build directory at {path}") from exc
+
+
+def _read_source_hash(path: Path) -> str:
+    try:
+        return _sha256(path)
+    except OSError as exc:
+        raise OSError(f"Unable to read source file at {path}") from exc
+
+
+def _read_source_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise OSError(f"Unable to read source file at {path}") from exc
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"Unable to read source file at {path}") from exc
+
+
+def _copy_source(source: Path, target: Path) -> None:
+    try:
+        shutil.copy2(source, target)
+    except OSError as exc:
+        raise OSError(f"Unable to copy source file from {source} to {target}") from exc
+
+
+def _write_text(path: Path, content: str, operation: str) -> None:
+    try:
+        path.write_text(content, encoding="utf-8")
+    except OSError as exc:
+        raise OSError(f"Unable to {operation} at {path}") from exc
 
 
 def _sha256(path: Path) -> str:
@@ -929,16 +1003,35 @@ def _entity_body(entity: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
-def main() -> None:
-    """Parse builder CLI arguments and print counts for the generated artifacts."""
+def create_parser() -> argparse.ArgumentParser:
+    """Create the shared argument parser for builder command entry points."""
 
     parser = argparse.ArgumentParser(description="Build the OPC UA 10000-5 structured knowledge base.")
     parser.add_argument("--source", default=r"C:\Users\admin\Downloads\OPC-10000-5-v1.05.06.md")
     parser.add_argument("--root", default=".")
     parser.add_argument("--rebuild", action="store_true")
-    args = parser.parse_args()
+    return parser
+
+
+def run_build(args: argparse.Namespace) -> None:
+    """Build from parsed CLI arguments and print generated artifact counts."""
+
     stats = build(Path(args.root), Path(args.source), rebuild=args.rebuild)
     print(json.dumps(stats, ensure_ascii=False, indent=2))
+
+
+def main() -> None:
+    """Parse builder CLI arguments and print counts for the generated artifacts."""
+
+    args = create_parser().parse_args()
+    try:
+        from .cli import run_cli
+    except ImportError:
+        if __package__:
+            raise
+        from cli import run_cli
+
+    run_cli(lambda: run_build(args))
 
 
 if __name__ == "__main__":

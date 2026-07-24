@@ -41,6 +41,7 @@ except ImportError as exc:
     raise SystemExit(2) from exc
 
 from opcua_kb import KnowledgeBase, write_graph_html, write_graph_json
+from opcua_kb.errors import format_action_error
 
 
 RELATION_OPTIONS = [
@@ -399,7 +400,14 @@ class KnowledgeBaseTUI(App[None]):
             self.notify("请输入搜索内容。", severity="warning")
             return
         top_k = int(self.query_one("#search-limit", Select).value)
-        results = self.kb.search(query, top_k=top_k)
+        try:
+            results = self.kb.search(query, top_k=top_k)
+        except (OSError, ValueError) as exc:
+            message = format_action_error("搜索", exc)
+            self.query_one("#search-detail", Markdown).update(f"## 搜索失败\n\n{message}")
+            self._set_status(message)
+            self.notify(message, severity="error")
+            return
         table = self.query_one("#search-results", DataTable)
         table.clear()
         self.search_results.clear()
@@ -426,7 +434,14 @@ class KnowledgeBaseTUI(App[None]):
         if not name:
             self.notify("请输入实体名。", severity="warning")
             return
-        entity = self.kb.get_entity(name)
+        try:
+            entity = self.kb.get_entity(name)
+        except (OSError, ValueError) as exc:
+            message = format_action_error("实体查询", exc)
+            self.query_one("#entity-detail", Markdown).update(f"## 实体查询失败\n\n{message}")
+            self._set_status(message)
+            self.notify(message, severity="error")
+            return
         target = self.query_one("#entity-detail", Markdown)
         if not entity:
             target.update(f"## 未找到实体\n\n`{name}`")
@@ -444,7 +459,14 @@ class KnowledgeBaseTUI(App[None]):
             return
         relation = str(self.query_one("#relation-kind", Select).value or "") or None
         depth = int(self.query_one("#relation-depth", Select).value)
-        edges = self.kb.relationships(entity, relation=relation, depth=depth)
+        try:
+            edges = self.kb.relationships(entity, relation=relation, depth=depth)
+        except (OSError, ValueError) as exc:
+            message = format_action_error("关系追踪", exc)
+            self.query_one("#relation-detail", Markdown).update(f"## 关系追踪失败\n\n{message}")
+            self._set_status(message)
+            self.notify(message, severity="error")
+            return
         table = self.query_one("#relation-results", DataTable)
         table.clear()
         self.relation_results.clear()
@@ -471,7 +493,17 @@ class KnowledgeBaseTUI(App[None]):
         """Render a chapter and select the structured document view."""
 
         section = self.query_one("#chapter-number", Input).value.strip()
-        chapter = self.kb.chapter(section) if section else None
+        if section:
+            try:
+                chapter = self.kb.chapter(section)
+            except (OSError, ValueError) as exc:
+                message = format_action_error("章节查询", exc)
+                self.query_one("#docs-detail", Markdown).update(f"## 章节查询失败\n\n{message}")
+                self._set_status(message)
+                self.notify(message, severity="error")
+                return
+        else:
+            chapter = None
         target = self.query_one("#docs-detail", Markdown)
         if not chapter:
             target.update(f"## 未找到章节\n\n`{section or '（空）'}`")
@@ -485,7 +517,17 @@ class KnowledgeBaseTUI(App[None]):
         """Populate structured and conventional views for the requested table."""
 
         number = self.query_one("#table-number", Input).value.strip()
-        table = self.kb.table(number) if number else None
+        if number:
+            try:
+                table = self.kb.table(number)
+            except (OSError, ValueError) as exc:
+                message = format_action_error("表格查询", exc)
+                self.query_one("#docs-detail", Markdown).update(f"## 表格查询失败\n\n{message}")
+                self._set_status(message)
+                self.notify(message, severity="error")
+                return
+        else:
+            table = None
         target = self.query_one("#docs-detail", Markdown)
         if not table:
             target.update(f"## 未找到表格\n\n`{number or '（空）'}`")

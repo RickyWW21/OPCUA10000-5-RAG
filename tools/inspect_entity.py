@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from opcua_kb import KnowledgeBase
+from opcua_kb.cli import run_cli
 
 
 def main() -> None:
@@ -29,13 +30,14 @@ def main() -> None:
     parser.add_argument("name", help="Entity name or entity id, e.g. ServerType or ObjectType:ServerType.")
     parser.add_argument("--root", default=str(ROOT), help="Knowledge base project root. Default: repository root.")
     args = parser.parse_args()
+    return run_cli(lambda: _run(args))
 
+def _run(args: argparse.Namespace) -> None:
     kb = KnowledgeBase(args.root)
     entity = kb.get_entity(args.name)
     if not entity:
         print(f"未找到实体: {args.name}")
         raise SystemExit(1)
-
     print(f"名称: {entity['name']}")
     print(f"类型: {entity['kind']}")
     print(f"章节: {entity.get('section')}")

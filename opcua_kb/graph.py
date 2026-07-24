@@ -235,15 +235,28 @@ def _graph_metadata(
 def write_graph_json(graph: dict[str, Any], path: Path) -> None:
     """Write a graph payload as human-readable UTF-8 JSON."""
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(graph, ensure_ascii=False, indent=2), encoding="utf-8")
+    contents = json.dumps(graph, ensure_ascii=False, indent=2)
+    _write_graph_export(contents, path)
 
 
 def write_graph_html(graph: dict[str, Any], path: Path) -> None:
     """Write a self-contained interactive graph page to disk."""
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_graph_html(graph), encoding="utf-8")
+    contents = render_graph_html(graph)
+    _write_graph_export(contents, path)
+
+
+def _write_graph_export(contents: str, path: Path) -> None:
+    """Create the export directory and write content with actionable I/O errors."""
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise OSError(f"Unable to create graph export directory for: {path}") from exc
+    try:
+        path.write_text(contents, encoding="utf-8")
+    except OSError as exc:
+        raise OSError(f"Unable to write graph export: {path}") from exc
 
 
 def render_graph_html(graph: dict[str, Any]) -> str:

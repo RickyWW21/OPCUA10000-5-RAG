@@ -203,7 +203,27 @@ class KnowledgeBase:
 
         if self._aliases is None:
             path = self.kb_dir / "aliases.json"
-            self._aliases = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+            try:
+                contents = path.read_text(encoding="utf-8")
+            except FileNotFoundError:
+                self._aliases = {}
+                return self._aliases
+            except OSError as exc:
+                raise OSError(f"Unable to read aliases artifact: {path}") from exc
+            except UnicodeDecodeError as exc:
+                raise ValueError(f"Invalid aliases artifact: {path}") from exc
+            try:
+                aliases = json.loads(contents)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Invalid aliases JSON: {path}") from exc
+            if not isinstance(aliases, dict):
+                raise ValueError(f"Invalid aliases JSON object: {path}")
+            if not all(
+                isinstance(alias, str) and isinstance(entity_id, str)
+                for alias, entity_id in aliases.items()
+            ):
+                raise ValueError(f"Invalid aliases JSON mapping: {path}")
+            self._aliases = aliases
         return self._aliases
 
     def _load_chapters(self) -> dict[str, dict[str, Any]]:

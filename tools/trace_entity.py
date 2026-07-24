@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from opcua_kb import KnowledgeBase
+from opcua_kb.cli import run_cli
 
 
 def main() -> None:
@@ -31,7 +32,9 @@ def main() -> None:
     parser.add_argument("--depth", type=int, default=1, help="Traversal depth. Default: 1.")
     parser.add_argument("--root", default=str(ROOT), help="Knowledge base project root. Default: repository root.")
     args = parser.parse_args()
+    return run_cli(lambda: _run(args))
 
+def _run(args: argparse.Namespace) -> None:
     kb = KnowledgeBase(args.root)
     edges = kb.relationships(args.entity, relation=args.relation, depth=args.depth)
     if not edges:
