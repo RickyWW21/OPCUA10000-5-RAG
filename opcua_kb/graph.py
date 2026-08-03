@@ -115,7 +115,8 @@ def _aggregate_collapsed_edges(
             continue
         if _is_low_value_external(source) or _is_low_value_external(target):
             continue
-        key = tuple(sorted((source, target)))
+        first, second = sorted((source, target))
+        key: tuple[str, str] = (first, second)
         edge_counter[key][relation] += RELATION_WEIGHTS.get(relation, 1)
         evidence[key].append(
             {

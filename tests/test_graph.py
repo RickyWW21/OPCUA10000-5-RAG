@@ -73,6 +73,26 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(1, graph["metadata"]["edge_count"])
         self.assertEqual("HAS_COMPONENT", next(iter(graph["edges"][0]["relations"])))
 
+    def test_graph_aggregates_reciprocal_relations_between_entities(self) -> None:
+        entities = [
+            {"id": "ObjectType:A", "name": "A", "kind": "ObjectType"},
+            {"id": "ObjectType:B", "name": "B", "kind": "ObjectType"},
+        ]
+        relationships = [
+            {"source": "ObjectType:A", "target": "ObjectType:B", "relation": "HAS_COMPONENT"},
+            {"source": "ObjectType:B", "target": "ObjectType:A", "relation": "USES_DATATYPE"},
+        ]
+
+        graph = build_knowledge_graph(
+            entities, relationships, include_defined=True, limit=0
+        )
+
+        self.assertEqual(1, graph["metadata"]["edge_count"])
+        self.assertEqual(
+            {"HAS_COMPONENT": 5, "USES_DATATYPE": 3},
+            graph["edges"][0]["relations"],
+        )
+
     def test_focus_depth_one_excludes_second_hop_edges(self) -> None:
         entities = [
             {"id": "ObjectType:A", "name": "A", "kind": "ObjectType"},
