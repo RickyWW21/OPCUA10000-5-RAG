@@ -58,6 +58,10 @@ class Table:
     conformance_units: list[str] = field(default_factory=list)
 
 
+class _PublicationRollbackError(OSError):
+    """Signal that generated-artifact backups were retained for recovery."""
+
+
 def build(root: Path, source: Path, rebuild: bool = False) -> dict[str, int]:
     """Run the complete source-copy, parse, export, and index pipeline."""
 
@@ -79,7 +83,10 @@ def build(root: Path, source: Path, rebuild: bool = False) -> dict[str, int]:
     _preflight_generated_targets(root, source)
     source_needs_copy = rebuild or not target_source.exists() or source_hash != _read_source_hash(target_source)
     _make_directory(root.parent)
+    for directory in (root / "tools", root / "exports"):
+        _make_directory(directory)
     stage_root = Path(tempfile.mkdtemp(prefix=f".{root.name}.build-", dir=root.parent))
+    retain_stage_root = False
     try:
         source_dir = stage_root / "source"
         kb_dir = stage_root / "kb"
@@ -98,8 +105,12 @@ def build(root: Path, source: Path, rebuild: bool = False) -> dict[str, int]:
         _build_fts(indexes_dir / "fts.sqlite", chapters, tables, entities, chunks)
         _write_readme(stage_root, metadata, len(chapters), len(tables), len(entities), len(relationships))
         _publish_generated_artifacts(stage_root, root, source.name, include_source=source_needs_copy)
+    except _PublicationRollbackError:
+        retain_stage_root = True
+        raise
     finally:
-        shutil.rmtree(stage_root, ignore_errors=True)
+        if not retain_stage_root:
+            shutil.rmtree(stage_root, ignore_errors=True)
     return {
         "chapters": len(chapters),
         "tables": len(tables),
@@ -169,15 +180,27 @@ def _publish_generated_artifacts(stage_root: Path, root: Path, source_name: str,
                 backed_up.append(relative_path)
             staged.replace(destination)
             published.append(relative_path)
-    except OSError:
+    except OSError as publish_error:
+        rollback_errors: list[OSError] = []
         for relative_path in reversed(published):
             destination = root / relative_path
-            if destination.exists():
-                destination.unlink()
+            try:
+                if destination.exists():
+                    destination.unlink()
+            except OSError as rollback_error:
+                rollback_errors.append(rollback_error)
         for relative_path in reversed(backed_up):
             backup = backup_root / relative_path
-            if backup.exists():
-                backup.replace(root / relative_path)
+            try:
+                if backup.exists():
+                    backup.replace(root / relative_path)
+            except OSError as rollback_error:
+                rollback_errors.append(rollback_error)
+        if rollback_errors:
+            detail = "; ".join(str(error) for error in rollback_errors)
+            raise _PublicationRollbackError(
+                f"Unable to roll back generated artifacts; recoverable backups remain at {backup_root}: {detail}"
+            ) from publish_error
         raise
 
 

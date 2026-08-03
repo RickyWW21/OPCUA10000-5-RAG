@@ -16,6 +16,7 @@ from opcua_kb.builder import (
     _build_fts,
     _connect_fts,
     _create_fts_schema,
+    _generated_artifact_paths,
     _make_directory,
     _read_source_text,
     _write_jsonl,
@@ -383,6 +384,74 @@ class ErrorBoundaryTests(unittest.TestCase):
             self.assertEqual(entities, (root / "kb" / "entities.jsonl").read_bytes())
             self.assertEqual(fts, (root / "indexes" / "fts.sqlite").read_bytes())
             self.assertEqual("Introduction", KnowledgeBase(root).chapter("1")["title"])
+
+    def test_publish_failure_restores_all_artifacts_without_staging_residue(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            temporary = Path(temporary_directory)
+            root = temporary / "output"
+            source = temporary / "source.md"
+            source.write_text("1 Introduction\n", encoding="utf-8")
+            build(root, source)
+            artifact_bytes = {
+                path: (root / path).read_bytes()
+                for path in _generated_artifact_paths(source.name)
+            }
+            source.write_text("1 Rebuilt\n", encoding="utf-8")
+            original_replace = Path.replace
+
+            def fail_manifest_publish(path: Path, target: Path) -> Path:
+                if path.name == "source_manifest.json" and path.parent.parent.name != ".backup" and target == root / "source" / "source_manifest.json":
+                    raise OSError("publish failure")
+                return original_replace(path, target)
+
+            with patch.object(Path, "replace", autospec=True, side_effect=fail_manifest_publish):
+                with self.assertRaises(OSError):
+                    build(root, source, rebuild=True)
+
+            self.assertEqual(
+                artifact_bytes,
+                {path: (root / path).read_bytes() for path in artifact_bytes},
+            )
+            self.assertEqual([], list(temporary.glob(".output.build-*")))
+
+    def test_rollback_failure_keeps_staged_backup_and_publish_cause(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            temporary = Path(temporary_directory)
+            root = temporary / "output"
+            source = temporary / "source.md"
+            source.write_text("1 Introduction\n", encoding="utf-8")
+            build(root, source)
+            source.write_text("1 Rebuilt\n", encoding="utf-8")
+            original_replace = Path.replace
+
+            def fail_publish_and_source_restore(path: Path, target: Path) -> Path:
+                if path.name == "source_manifest.json" and target == root / "source" / "source_manifest.json":
+                    raise OSError("publish failure")
+                if path.name == source.name and path.parent.parent.name == ".backup" and target == root / "source" / source.name:
+                    raise OSError("rollback failure")
+                return original_replace(path, target)
+
+            with patch.object(Path, "replace", autospec=True, side_effect=fail_publish_and_source_restore):
+                with self.assertRaises(OSError) as raised:
+                    build(root, source, rebuild=True)
+
+            self.assertIn("rollback", str(raised.exception).lower())
+            self.assertIsInstance(raised.exception.__cause__, OSError)
+            stage_roots = list(temporary.glob(".output.build-*"))
+            self.assertEqual(1, len(stage_roots))
+            self.assertTrue((stage_roots[0] / ".backup" / "source" / source.name).exists())
+
+    def test_fresh_build_creates_tools_and_exports_directories(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            temporary = Path(temporary_directory)
+            root = temporary / "output"
+            source = temporary / "source.md"
+            source.write_text("1 Introduction\n", encoding="utf-8")
+
+            build(root, source)
+
+            self.assertTrue((root / "tools").is_dir())
+            self.assertTrue((root / "exports").is_dir())
 
     def test_graph_json_mkdir_failure_identifies_destination_and_operation(self) -> None:
         with TemporaryDirectory() as temporary_directory:
