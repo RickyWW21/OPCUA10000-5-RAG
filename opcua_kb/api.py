@@ -64,8 +64,7 @@ class KnowledgeBase:
         start = self._resolve_entity_id(entity)
         if not start:
             return []
-        self._load_relationships()
-        relationships_by_source = self._relationships_by_source or {}
+        relationships_by_source = self._load_relationships_by_source()
         relation_norm = relation.upper() if relation else None
         results: list[dict[str, Any]] = []
         # A visited set prevents cycles while preserving breadth-first result order.
@@ -245,12 +244,18 @@ class KnowledgeBase:
 
         if self._relationships is None:
             self._relationships = list(_read_jsonl(self.kb_dir / "relationships.jsonl"))
+        return self._relationships
+
+    def _load_relationships_by_source(self) -> dict[str, list[dict[str, Any]]]:
+        """Load and cache outgoing relationship records keyed by source."""
+
+        if self._relationships_by_source is None:
             self._relationships_by_source = {}
-            for edge in self._relationships:
+            for edge in self._load_relationships():
                 source = edge.get("source")
                 if source:
                     self._relationships_by_source.setdefault(source, []).append(edge)
-        return self._relationships
+        return self._relationships_by_source
 
 
 def _read_jsonl(path: Path):
