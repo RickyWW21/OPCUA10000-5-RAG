@@ -441,6 +441,39 @@ class ErrorBoundaryTests(unittest.TestCase):
             self.assertEqual(1, len(stage_roots))
             self.assertTrue((stage_roots[0] / ".backup" / "source" / source.name).exists())
 
+    def test_locked_newly_published_target_reports_residual_recovery_state(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            temporary = Path(temporary_directory)
+            root = temporary / "output"
+            source = temporary / "source.md"
+            source.write_text("1 Introduction\n", encoding="utf-8")
+            original_replace = Path.replace
+            original_unlink = Path.unlink
+
+            def fail_manifest_publish(path: Path, target: Path) -> Path:
+                if path.name == "source_manifest.json" and target == root / "source" / "source_manifest.json":
+                    raise OSError("publish failure")
+                return original_replace(path, target)
+
+            def fail_source_rollback(path: Path, *args: object, **kwargs: object) -> None:
+                if path == root / "source" / source.name:
+                    raise OSError(f"locked target: {path}")
+                original_unlink(path, *args, **kwargs)
+
+            with patch.object(Path, "replace", autospec=True, side_effect=fail_manifest_publish), patch.object(
+                Path, "unlink", autospec=True, side_effect=fail_source_rollback
+            ):
+                with self.assertRaises(OSError) as raised:
+                    build(root, source)
+
+            stage_roots = list(temporary.glob(".output.build-*"))
+            self.assertEqual(1, len(stage_roots))
+            self.assertIn(str(root / "source" / source.name), str(raised.exception))
+            self.assertIn(str(stage_roots[0]), str(raised.exception))
+            self.assertNotIn(".backup", str(raised.exception))
+            self.assertTrue((root / "source" / source.name).exists())
+            self.assertFalse((stage_roots[0] / ".backup").exists())
+
     def test_fresh_build_creates_tools_and_exports_directories(self) -> None:
         with TemporaryDirectory() as temporary_directory:
             temporary = Path(temporary_directory)

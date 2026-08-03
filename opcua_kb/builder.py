@@ -181,25 +181,29 @@ def _publish_generated_artifacts(stage_root: Path, root: Path, source_name: str,
             staged.replace(destination)
             published.append(relative_path)
     except OSError as publish_error:
-        rollback_errors: list[OSError] = []
+        rollback_errors: list[str] = []
         for relative_path in reversed(published):
             destination = root / relative_path
             try:
                 if destination.exists():
                     destination.unlink()
             except OSError as rollback_error:
-                rollback_errors.append(rollback_error)
+                rollback_errors.append(f"unable to remove published target {destination}: {rollback_error}")
         for relative_path in reversed(backed_up):
             backup = backup_root / relative_path
             try:
                 if backup.exists():
                     backup.replace(root / relative_path)
             except OSError as rollback_error:
-                rollback_errors.append(rollback_error)
+                rollback_errors.append(f"unable to restore backup {backup} to {root / relative_path}: {rollback_error}")
         if rollback_errors:
-            detail = "; ".join(str(error) for error in rollback_errors)
+            recovery_locations = [str(stage_root)]
+            if backup_root.exists():
+                recovery_locations.append(str(backup_root))
+            detail = "; ".join(rollback_errors)
             raise _PublicationRollbackError(
-                f"Unable to roll back generated artifacts; recoverable backups remain at {backup_root}: {detail}"
+                f"Unable to roll back generated artifacts; recoverable publication state remains at "
+                f"{', '.join(recovery_locations)}: {detail}"
             ) from publish_error
         raise
 
