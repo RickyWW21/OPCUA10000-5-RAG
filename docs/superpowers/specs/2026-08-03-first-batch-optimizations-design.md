@@ -17,10 +17,12 @@ staging tree contains `kb/`, `indexes/`, `source/`, generated `README.md`, and
 the exported source copy. Generation errors clean up staging and leave the current
 published artifacts untouched.
 
-After successful generation, the current generated directories and README are
-renamed to a backup location, staged output is moved into place, and backups are
-removed. If a publish rename fails, the implementation restores any moved backup
-before reporting the error. The source Markdown input is never moved or altered.
+The project root also contains source code, so it cannot be replaced as a whole.
+After successful generation, publication is a backup/commit/rollback transaction
+over only the generated files: the previous targets are moved to a backup area,
+staged files are moved into place, and backups are removed. If any publish move
+fails, all moved targets are restored before reporting the error. The source
+Markdown input and project source files are never moved or altered.
 
 ## Relationship Traversal
 
