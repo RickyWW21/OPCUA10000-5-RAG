@@ -9,6 +9,7 @@ import subprocess
 import sys
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from opcua_kb import KnowledgeBase
 from opcua_kb.builder import (
@@ -363,6 +364,25 @@ class ErrorBoundaryTests(unittest.TestCase):
             self.assertIn(str(readme_path), str(raised.exception))
             self.assertIn("write readme", str(raised.exception).lower())
             self.assertIsInstance(raised.exception.__cause__, OSError)
+
+    def test_failed_rebuild_restores_previously_published_artifacts(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            temporary = Path(temporary_directory)
+            root = temporary / "output"
+            source = temporary / "source.md"
+            source.write_text("1 Introduction\n", encoding="utf-8")
+            build(root, source)
+            entities = (root / "kb" / "entities.jsonl").read_bytes()
+            fts = (root / "indexes" / "fts.sqlite").read_bytes()
+
+            source.write_text("1 Rebuilt\n", encoding="utf-8")
+            with patch("opcua_kb.builder._write_readme", side_effect=OSError("README failure")):
+                with self.assertRaises(OSError):
+                    build(root, source, rebuild=True)
+
+            self.assertEqual(entities, (root / "kb" / "entities.jsonl").read_bytes())
+            self.assertEqual(fts, (root / "indexes" / "fts.sqlite").read_bytes())
+            self.assertEqual("Introduction", KnowledgeBase(root).chapter("1")["title"])
 
     def test_graph_json_mkdir_failure_identifies_destination_and_operation(self) -> None:
         with TemporaryDirectory() as temporary_directory:

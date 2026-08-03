@@ -9,6 +9,7 @@ import json
 import re
 import shutil
 import sqlite3
+import tempfile
 from dataclasses import dataclass, field
 from io import StringIO
 from pathlib import Path
@@ -62,26 +63,11 @@ def build(root: Path, source: Path, rebuild: bool = False) -> dict[str, int]:
 
     root = root.resolve()
     source = source.resolve()
-    source_dir = root / "source"
-    kb_dir = root / "kb"
-    indexes_dir = root / "indexes"
-    tools_dir = root / "tools"
-    exports_dir = root / "exports"
-    for directory in (source_dir, kb_dir, indexes_dir, tools_dir, exports_dir):
-        _make_directory(directory)
-
-    # Keep a provenance copy under the project, but avoid rewriting it when unchanged.
-    target_source = source_dir / source.name
+    target_source = root / "source" / source.name
     source_hash = _read_source_hash(source)
-    if rebuild or not target_source.exists() or source_hash != _read_source_hash(target_source):
-        _copy_source(source, target_source)
-
     text = _read_source_text(source)
     lines = text.splitlines()
     metadata = _metadata(text, source, target_source, source_hash)
-    manifest_path = source_dir / "source_manifest.json"
-    manifest = json.dumps(metadata, ensure_ascii=False, indent=2)
-    _write_text(manifest_path, manifest, "write source manifest")
 
     # Later stages enrich earlier records in place: tables attach to chapters and
     # entity extraction attaches entity IDs back to both chapters and tables.
@@ -90,16 +76,30 @@ def build(root: Path, source: Path, rebuild: bool = False) -> dict[str, int]:
     entities, relationships, aliases = _extract_entities_and_relationships(chapters, tables, target_source)
     chunks = _make_chunks(chapters, tables, entities)
 
-    _write_jsonl(kb_dir / "chapters.jsonl", [c.__dict__ for c in chapters])
-    _write_jsonl(kb_dir / "tables.jsonl", [t.__dict__ for t in tables])
-    _write_jsonl(kb_dir / "entities.jsonl", entities)
-    _write_jsonl(kb_dir / "relationships.jsonl", relationships)
-    _write_jsonl(kb_dir / "chunks.jsonl", chunks)
-    aliases_path = kb_dir / "aliases.json"
-    aliases_json = json.dumps(aliases, ensure_ascii=False, indent=2)
-    _write_text(aliases_path, aliases_json, "write aliases artifact")
-    _build_fts(indexes_dir / "fts.sqlite", chapters, tables, entities, chunks)
-    _write_readme(root, metadata, len(chapters), len(tables), len(entities), len(relationships))
+    _preflight_generated_targets(root, source)
+    source_needs_copy = rebuild or not target_source.exists() or source_hash != _read_source_hash(target_source)
+    _make_directory(root.parent)
+    stage_root = Path(tempfile.mkdtemp(prefix=f".{root.name}.build-", dir=root.parent))
+    try:
+        source_dir = stage_root / "source"
+        kb_dir = stage_root / "kb"
+        indexes_dir = stage_root / "indexes"
+        for directory in (source_dir, kb_dir, indexes_dir):
+            _make_directory(directory)
+
+        _copy_source(source if source_needs_copy else target_source, source_dir / source.name)
+        _write_text(source_dir / "source_manifest.json", json.dumps(metadata, ensure_ascii=False, indent=2), "write source manifest")
+        _write_jsonl(kb_dir / "chapters.jsonl", [c.__dict__ for c in chapters])
+        _write_jsonl(kb_dir / "tables.jsonl", [t.__dict__ for t in tables])
+        _write_jsonl(kb_dir / "entities.jsonl", entities)
+        _write_jsonl(kb_dir / "relationships.jsonl", relationships)
+        _write_jsonl(kb_dir / "chunks.jsonl", chunks)
+        _write_text(kb_dir / "aliases.json", json.dumps(aliases, ensure_ascii=False, indent=2), "write aliases artifact")
+        _build_fts(indexes_dir / "fts.sqlite", chapters, tables, entities, chunks)
+        _write_readme(stage_root, metadata, len(chapters), len(tables), len(entities), len(relationships))
+        _publish_generated_artifacts(stage_root, root, source.name, include_source=source_needs_copy)
+    finally:
+        shutil.rmtree(stage_root, ignore_errors=True)
     return {
         "chapters": len(chapters),
         "tables": len(tables),
@@ -107,6 +107,78 @@ def build(root: Path, source: Path, rebuild: bool = False) -> dict[str, int]:
         "relationships": len(relationships),
         "chunks": len(chunks),
     }
+
+
+def _generated_artifact_paths(source_name: str, include_source: bool = True) -> tuple[Path, ...]:
+    """Return the artifact paths owned by the builder publication transaction."""
+
+    artifacts = (
+        Path("source") / "source_manifest.json",
+        Path("kb") / "chapters.jsonl",
+        Path("kb") / "tables.jsonl",
+        Path("kb") / "entities.jsonl",
+        Path("kb") / "relationships.jsonl",
+        Path("kb") / "chunks.jsonl",
+        Path("kb") / "aliases.json",
+        Path("indexes") / "fts.sqlite",
+        Path("README.md"),
+    )
+    return ((Path("source") / source_name,) if include_source else ()) + artifacts
+
+
+def _preflight_generated_targets(root: Path, source: Path) -> None:
+    """Preserve write error contracts for destinations that are directories."""
+
+    actions = {
+        Path("source") / source.name: "copy source",
+        Path("source") / "source_manifest.json": "write source manifest",
+        Path("kb") / "chapters.jsonl": "write JSONL",
+        Path("kb") / "tables.jsonl": "write JSONL",
+        Path("kb") / "entities.jsonl": "write JSONL",
+        Path("kb") / "relationships.jsonl": "write JSONL",
+        Path("kb") / "chunks.jsonl": "write JSONL",
+        Path("kb") / "aliases.json": "write aliases artifact",
+        Path("indexes") / "fts.sqlite": "prepare FTS index",
+        Path("README.md"): "write README",
+    }
+    for relative_path, action in actions.items():
+        target = root / relative_path
+        if target.is_dir():
+            error = IsADirectoryError(f"{target} is a directory")
+            if relative_path == Path("source") / source.name:
+                raise OSError(f"Unable to {action} from {source} to {target}") from error
+            raise OSError(f"Unable to {action} at {target}") from error
+
+
+def _publish_generated_artifacts(stage_root: Path, root: Path, source_name: str, include_source: bool = True) -> None:
+    """Replace generated files with a rollback-capable same-filesystem transaction."""
+
+    artifacts = _generated_artifact_paths(source_name, include_source)
+    backup_root = stage_root / ".backup"
+    published: list[Path] = []
+    backed_up: list[Path] = []
+    try:
+        for relative_path in artifacts:
+            destination = root / relative_path
+            staged = stage_root / relative_path
+            _make_directory(destination.parent)
+            if destination.exists():
+                backup = backup_root / relative_path
+                _make_directory(backup.parent)
+                destination.replace(backup)
+                backed_up.append(relative_path)
+            staged.replace(destination)
+            published.append(relative_path)
+    except OSError:
+        for relative_path in reversed(published):
+            destination = root / relative_path
+            if destination.exists():
+                destination.unlink()
+        for relative_path in reversed(backed_up):
+            backup = backup_root / relative_path
+            if backup.exists():
+                backup.replace(root / relative_path)
+        raise
 
 
 def _metadata(text: str, source: Path, copied_source: Path, source_hash: str) -> dict[str, Any]:
