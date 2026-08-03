@@ -366,6 +366,19 @@ class ErrorBoundaryTests(unittest.TestCase):
             self.assertIn("write readme", str(raised.exception).lower())
             self.assertIsInstance(raised.exception.__cause__, OSError)
 
+    def test_build_rejects_source_manifest_filename_without_changing_root(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            temporary = Path(temporary_directory)
+            root = temporary / "output"
+            source = temporary / "source_manifest.json"
+            source.write_text("1 Introduction\n", encoding="utf-8")
+
+            with self.assertRaises(ValueError) as raised:
+                build(root, source)
+
+            self.assertIn("source_manifest.json", str(raised.exception))
+            self.assertFalse(root.exists())
+
     def test_failed_rebuild_restores_previously_published_artifacts(self) -> None:
         with TemporaryDirectory() as temporary_directory:
             temporary = Path(temporary_directory)
