@@ -67,7 +67,7 @@ def build(root: Path, source: Path, rebuild: bool = False) -> dict[str, int]:
 
     root = root.resolve()
     source = source.resolve()
-    if source.name == "source_manifest.json":
+    if source.name.casefold() == "source_manifest.json":
         raise ValueError("Source filename source_manifest.json is reserved for the generated source manifest")
     target_source = root / "source" / source.name
     source_hash = _read_source_hash(source)

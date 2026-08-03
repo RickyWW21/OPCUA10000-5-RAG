@@ -369,15 +369,19 @@ class ErrorBoundaryTests(unittest.TestCase):
     def test_build_rejects_source_manifest_filename_without_changing_root(self) -> None:
         with TemporaryDirectory() as temporary_directory:
             temporary = Path(temporary_directory)
-            root = temporary / "output"
-            source = temporary / "source_manifest.json"
-            source.write_text("1 Introduction\n", encoding="utf-8")
+            for index, filename in enumerate(("source_manifest.json", "source_manifest.JSON")):
+                with self.subTest(filename=filename):
+                    case_directory = temporary / f"case-{index}"
+                    root = case_directory / "output"
+                    source = case_directory / filename
+                    case_directory.mkdir()
+                    source.write_text("1 Introduction\n", encoding="utf-8")
 
-            with self.assertRaises(ValueError) as raised:
-                build(root, source)
+                    with self.assertRaises(ValueError) as raised:
+                        build(root, source)
 
-            self.assertIn("source_manifest.json", str(raised.exception))
-            self.assertFalse(root.exists())
+                    self.assertIn("source_manifest.json", str(raised.exception))
+                    self.assertFalse(root.exists())
 
     def test_failed_rebuild_restores_previously_published_artifacts(self) -> None:
         with TemporaryDirectory() as temporary_directory:
