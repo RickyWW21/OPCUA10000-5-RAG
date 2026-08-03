@@ -40,6 +40,8 @@ class KnowledgeBaseTests(unittest.TestCase):
         self.assertIsNone(self.kb._relationships_by_source)
         edges = self.kb._load_relationships()
         self.assertIsNone(self.kb._relationships_by_source)
+        self.kb.graph()
+        self.assertIsNone(self.kb._relationships_by_source)
 
         relationships = self.kb.relationships("server", depth=2)
 
