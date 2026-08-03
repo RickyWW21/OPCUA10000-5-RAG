@@ -115,10 +115,10 @@ Add this test to `KnowledgeBaseTests`:
 
 ```python
 def test_relationships_cache_outgoing_edges_by_source_in_file_order(self) -> None:
-    edges = self.kb._load_relationships()
-    self.assertIsNone(getattr(self.kb, "_relationships_by_source", None))
+    self.assertIsNone(self.kb._relationships_by_source)
 
     results = self.kb.relationships("server", depth=2)
+    edges = self.kb._load_relationships()
 
     self.assertEqual(edges, [edge for group in self.kb._relationships_by_source.values() for edge in group])
     self.assertEqual(
