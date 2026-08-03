@@ -26,6 +26,7 @@ class KnowledgeBase:
         self._chapters: dict[str, dict[str, Any]] | None = None
         self._tables: dict[str, dict[str, Any]] | None = None
         self._relationships: list[dict[str, Any]] | None = None
+        self._relationships_by_source: dict[str, list[dict[str, Any]]] | None = None
 
     def get_entity(self, name: str) -> dict[str, Any] | None:
         """Resolve an entity by ID, normalized alias, or case-insensitive name."""
@@ -63,7 +64,8 @@ class KnowledgeBase:
         start = self._resolve_entity_id(entity)
         if not start:
             return []
-        relationships = self._load_relationships()
+        self._load_relationships()
+        relationships_by_source = self._relationships_by_source or {}
         relation_norm = relation.upper() if relation else None
         results: list[dict[str, Any]] = []
         # A visited set prevents cycles while preserving breadth-first result order.
@@ -73,9 +75,7 @@ class KnowledgeBase:
             current, current_depth = queue.popleft()
             if current_depth >= depth:
                 continue
-            for edge in relationships:
-                if edge.get("source") != current:
-                    continue
+            for edge in relationships_by_source.get(current, []):
                 if relation_norm and edge.get("relation") != relation_norm:
                     continue
                 results.append(edge)
@@ -245,6 +245,11 @@ class KnowledgeBase:
 
         if self._relationships is None:
             self._relationships = list(_read_jsonl(self.kb_dir / "relationships.jsonl"))
+            self._relationships_by_source = {}
+            for edge in self._relationships:
+                source = edge.get("source")
+                if source:
+                    self._relationships_by_source.setdefault(source, []).append(edge)
         return self._relationships
 
 
