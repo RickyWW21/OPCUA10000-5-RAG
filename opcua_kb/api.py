@@ -250,11 +250,12 @@ class KnowledgeBase:
         """Load and cache outgoing relationship records keyed by source."""
 
         if self._relationships_by_source is None:
-            self._relationships_by_source = {}
+            relationships_by_source: dict[str, list[dict[str, Any]]] = {}
             for edge in self._load_relationships():
                 source = edge.get("source")
-                if source:
-                    self._relationships_by_source.setdefault(source, []).append(edge)
+                if isinstance(source, str):
+                    relationships_by_source.setdefault(source, []).append(edge)
+            self._relationships_by_source = relationships_by_source
         return self._relationships_by_source
 
 

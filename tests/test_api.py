@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from opcua_kb import KnowledgeBase
-from tests.helpers import write_knowledge_base
+from tests.helpers import write_jsonl, write_knowledge_base
 
 
 class KnowledgeBaseTests(unittest.TestCase):
@@ -37,8 +37,28 @@ class KnowledgeBaseTests(unittest.TestCase):
         self.assertEqual(["HAS_COMPONENT"], [edge["relation"] for edge in relationships])
 
     def test_relationships_cache_outgoing_edges_by_source_in_file_order(self) -> None:
+        write_jsonl(
+            self.root / "kb" / "relationships.jsonl",
+            [
+                {
+                    "source": "ObjectType:ServerType",
+                    "relation": "FIRST",
+                    "target": "DataType:BuildInfo",
+                },
+                {
+                    "source": "DataType:BuildInfo",
+                    "relation": "THIRD",
+                    "target": "ObjectType:ServerType",
+                },
+                {
+                    "source": "ObjectType:ServerType",
+                    "relation": "SECOND",
+                    "target": "ObjectType:ServerType",
+                },
+            ],
+        )
         self.assertIsNone(self.kb._relationships_by_source)
-        edges = self.kb._load_relationships()
+        self.kb._load_relationships()
         self.assertIsNone(self.kb._relationships_by_source)
         self.kb.graph()
         self.assertIsNone(self.kb._relationships_by_source)
@@ -46,16 +66,52 @@ class KnowledgeBaseTests(unittest.TestCase):
         relationships = self.kb.relationships("server", depth=2)
 
         self.assertEqual(
-            edges,
+            ["FIRST", "SECOND"],
             [
-                edge
-                for outgoing_edges in self.kb._relationships_by_source.values()
-                for edge in outgoing_edges
+                edge["relation"]
+                for edge in self.kb._relationships_by_source["ObjectType:ServerType"]
             ],
         )
         self.assertEqual(
-            ["HAS_COMPONENT", "USES_DATATYPE"],
+            ["THIRD"],
+            [
+                edge["relation"]
+                for edge in self.kb._relationships_by_source["DataType:BuildInfo"]
+            ],
+        )
+        self.assertEqual(
+            ["FIRST", "SECOND", "THIRD"],
             [edge["relation"] for edge in relationships],
+        )
+
+    def test_relationships_skip_malformed_sources_and_keep_cache_usable(self) -> None:
+        write_jsonl(
+            self.root / "kb" / "relationships.jsonl",
+            [
+                {
+                    "source": ["invalid"],
+                    "relation": "INVALID",
+                    "target": "DataType:BuildInfo",
+                },
+                {
+                    "source": "ObjectType:ServerType",
+                    "relation": "HAS_COMPONENT",
+                    "target": "DataType:BuildInfo",
+                },
+            ],
+        )
+
+        first_results = self.kb.relationships("server")
+        second_results = self.kb.relationships("server")
+
+        self.assertEqual(["HAS_COMPONENT"], [edge["relation"] for edge in first_results])
+        self.assertEqual(first_results, second_results)
+        self.assertEqual(
+            ["HAS_COMPONENT"],
+            [
+                edge["relation"]
+                for edge in self.kb._relationships_by_source["ObjectType:ServerType"]
+            ],
         )
 
     def test_invalid_jsonl_reports_the_artifact_path_and_line(self) -> None:
