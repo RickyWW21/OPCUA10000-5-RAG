@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import unittest
+import subprocess
+import sys
 
 from opcua_kb.graph import build_knowledge_graph, render_graph_html
 from opcua_kb.graph_render import render_interactive_graph_html
@@ -56,6 +58,11 @@ class GraphTests(unittest.TestCase):
         graph = {"nodes": [], "edges": [], "metadata": {}}
 
         self.assertEqual(render_graph_html(graph), render_interactive_graph_html(graph))
+
+    def test_graph_model_import_does_not_load_renderer(self) -> None:
+        command = [sys.executable, "-c", "import opcua_kb.graph; import sys; assert 'opcua_kb.graph_render' not in sys.modules"]
+
+        self.assertEqual(0, subprocess.run(command, check=False).returncode)
 
     def test_graph_filters_relations_weights_and_defined_edges(self) -> None:
         entities = [

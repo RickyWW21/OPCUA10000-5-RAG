@@ -7,8 +7,6 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-from .graph_render import _norm, render_interactive_graph_html
-
 RELATION_WEIGHTS = {
     "HAS_COMPONENT": 5,
     "HAS_PROPERTY": 4,
@@ -247,6 +245,8 @@ def _write_graph_export(contents: str, path: Path) -> None:
 def render_graph_html(graph: dict[str, Any]) -> str:
     """Render the graph as a self-contained interactive HTML document."""
 
+    from .graph_render import render_interactive_graph_html
+
     return render_interactive_graph_html(graph)
 
 
@@ -357,3 +357,7 @@ def _node_payload(node_id: str, entity_by_id: dict[str, dict[str, Any]], score: 
     elif ":" in node_id:
         kind = node_id.split(":", 1)[0]
     return {"id": node_id, "label": node_id.split(":")[-1], "kind": kind, "score": score}
+
+
+def _norm(value: str) -> str:
+    return "".join(value.lower().split())

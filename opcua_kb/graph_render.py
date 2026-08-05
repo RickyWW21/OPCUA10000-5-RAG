@@ -510,8 +510,3 @@ def _json_for_html_script(value: Any) -> str:
         .replace("\u2028", "\\u2028")
         .replace("\u2029", "\\u2029")
     )
-
-
-def _norm(value: str) -> str:
-    return "".join(value.lower().split())
-
