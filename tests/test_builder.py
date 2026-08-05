@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 
 from opcua_kb.builder import Table, _apply_table_to_entity, _entity_kind
+from opcua_kb.builder_models import Table as ModelTable
 
 
 class BuilderTests(unittest.TestCase):
@@ -22,6 +23,9 @@ class BuilderTests(unittest.TestCase):
             "fields": [],
             "enum_values": [],
         }
+
+    def test_builder_reexports_table_model(self) -> None:
+        self.assertIs(Table, ModelTable)
 
     def test_reference_row_populates_component_and_edge(self) -> None:
         table = Table("table-1", "1", "Components", "6.3", "reference", None, 1, 3, [])

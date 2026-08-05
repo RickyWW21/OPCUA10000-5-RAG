@@ -10,52 +10,21 @@ import re
 import shutil
 import sqlite3
 import tempfile
-from dataclasses import dataclass, field
 from io import StringIO
 from pathlib import Path
 from typing import Any
 
+try:
+    from .builder_models import Chapter, Table
+except ImportError:
+    if __package__:
+        raise
+    from builder_models import Chapter, Table
 
 DOC_NAME = "OPC-10000-5"
 HEADING_RE = re.compile(r"^(\d+(?:\.\d+){0,5})\s+(.+?)\s*$")
 ANNEX_RE = re.compile(r"^(Annex\s+[A-Z])\s+(.+?)\s*$")
 TABLE_RE = re.compile(r"^Table\s+(\d+|[A-Z]\.\d+)\s+-\s+(.+?)\s*$")
-
-
-@dataclass
-class Chapter:
-    """A parsed specification section with source boundaries and linked records."""
-
-    id: str
-    section: str
-    title: str
-    level: int
-    parent: str | None
-    path: list[str]
-    start_line: int
-    end_line: int = 0
-    text: str = ""
-    tables: list[str] = field(default_factory=list)
-    entities: list[str] = field(default_factory=list)
-
-
-@dataclass
-class Table:
-    """A specification table in both source-preserving and normalized forms."""
-
-    id: str
-    number: str
-    caption: str
-    section: str | None
-    table_kind: str
-    target_entity: str | None
-    start_line: int
-    end_line: int
-    raw_lines: list[str]
-    columns: list[str] = field(default_factory=list)
-    rows: list[dict[str, str]] = field(default_factory=list)
-    attributes: dict[str, str] = field(default_factory=dict)
-    conformance_units: list[str] = field(default_factory=list)
 
 
 class _PublicationRollbackError(OSError):
