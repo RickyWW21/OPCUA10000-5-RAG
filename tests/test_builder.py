@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 
 from opcua_kb.builder import Chapter, Table, _apply_table_to_entity, _entity_kind
+from opcua_kb.builder_parse import parse_chapters
 from opcua_kb.builder_models import Chapter as ModelChapter, Table as ModelTable
 
 
@@ -27,6 +28,11 @@ class BuilderTests(unittest.TestCase):
     def test_builder_reexports_table_model(self) -> None:
         self.assertIs(Chapter, ModelChapter)
         self.assertIs(Table, ModelTable)
+
+    def test_parse_chapters_returns_nested_numbered_sections(self) -> None:
+        chapters = parse_chapters(["1 Introduction", "1.1 Scope"])
+
+        self.assertEqual(["1", "1.1"], [chapter.section for chapter in chapters])
 
     def test_reference_row_populates_component_and_edge(self) -> None:
         table = Table("table-1", "1", "Components", "6.3", "reference", None, 1, 3, [])
