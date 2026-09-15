@@ -1,15 +1,15 @@
 # Complete RAG Design
 
 **Date:** 2026-09-15  
-**Status:** Approved design
+**Status:** Revised design, scope clarification pending implementation
 
 ## Goal
 
-Turn the existing offline OPC UA knowledge base into an end-to-end RAG system that retrieves grounded evidence, optionally enriches it with graph relationships, and generates a cited answer through a configurable OpenAI-compatible chat model.
+Turn the existing offline knowledge base for **OPC UA 10000-5, Part 5: Information Model** into an end-to-end RAG system that retrieves grounded Part 5 evidence, optionally enriches it with Part 5 entity relationships, and generates a cited answer through a configurable OpenAI-compatible chat model.
 
 ## Scope
 
-The first implementation will use the existing SQLite FTS5 index as the retrieval engine. It will not add an embedding model, vector database, or external framework. The design keeps those capabilities replaceable through small interfaces, so semantic retrieval can be added later without changing the public RAG API.
+The first implementation will use the existing SQLite FTS5 index as the retrieval engine. That index, its JSONL artifacts, graph relationships, prompts, citations, and offline fallback are all restricted to the repository's OPC UA 10000-5 Part 5 source. It will not add an embedding model, vector database, external framework, or any other OPC UA Part as a retrieval source. The design keeps semantic retrieval replaceable through small interfaces, so it can be added later without changing the public RAG API while retaining the Part 5-only boundary.
 
 The system will support two modes:
 
@@ -32,7 +32,7 @@ question
 
 1. `opcua_kb/retrieval.py`
    - Defines a small retriever protocol and an FTS-backed implementation around `KnowledgeBase`.
-   - Performs exact/FTS retrieval, deduplication, top-k limiting, and optional relationship expansion.
+   - Performs exact/FTS retrieval, deduplication, top-k limiting, and optional relationship expansion using Part 5 records only.
 
 2. `opcua_kb/rag.py`
    - Owns the end-to-end `RAGPipeline`.
@@ -72,7 +72,7 @@ class RAGPipeline:
     def ask(self, question: str, *, top_k: int = 6, relationship_depth: int = 0) -> RAGAnswer: ...
 ```
 
-The existing `KnowledgeBase` API remains backward compatible. The pipeline accepts it through constructor injection, which keeps tests deterministic and allows alternate retrievers later.
+The existing `KnowledgeBase` API remains backward compatible. The pipeline accepts it through constructor injection, which keeps tests deterministic and allows alternate retrievers later, provided they return Part 5 evidence.
 
 ## Retrieval and Context Rules
 
@@ -80,6 +80,7 @@ The existing `KnowledgeBase` API remains backward compatible. The pipeline accep
 - FTS results fill the remaining slots.
 - Duplicate IDs are removed while preserving first-seen order.
 - Relationship expansion is opt-in and bounded by depth and the same context limit.
+- Every retrieved record must identify the Part 5 document (`OPC-10000-5`) or a generated artifact derived from it; records from other OPC UA Parts are out of scope and must not be passed to the model.
 - Each context item gets a stable citation label such as `[E1]`, `[T2]`, or `[C3]`.
 - Context includes title, section/table identifier, snippet, and source record ID; it is truncated to a fixed character budget before model invocation.
 - The prompt instructs the model to answer only from supplied context, cite claims with labels, and say when evidence is insufficient.
@@ -121,6 +122,7 @@ The fallback is deterministic and grounded. It summarizes the top retrieved reco
 ## Non-Goals
 
 - No vector database or embedding model in this iteration.
+- No retrieval or generation grounded in OPC UA Parts 1-4, 6-20, vendor documents, or general web content.
 - No streaming responses.
 - No conversation memory or multi-turn session state.
 - No frontend application.
