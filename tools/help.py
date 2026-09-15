@@ -121,6 +121,11 @@ Notes / 注意事项
     CLI 输出使用中文标签并保留英文技术标识符。
   - Rebuilding rewrites README.md, kb/*.jsonl, indexes/fts.sqlite and source/source_manifest.json.
     重新构建会覆盖 README.md、kb/*.jsonl、indexes/fts.sqlite 和 source/source_manifest.json。
+  python tools/ask_kb.py "ServerType" --top-k 5
+      Ask a grounded OPC UA 10000-5 Part 5 question and print citations.
+
+  python tools/ask_kb.py "ServerType" --offline
+      Use deterministic local retrieval output without an API call.
 """.strip()
 
 

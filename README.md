@@ -32,7 +32,18 @@ python tools/graph_kb.py --format html --output exports/knowledge_graph.html
 ```powershell
 python help.py
 python tools/help.py
+python tools/ask_kb.py "ServerType" --offline
 ```
+
+## Part 5 RAG 闂瓟
+
+```powershell
+$env:DEEPSEEK_API_KEY = "..."
+python tools/ask_kb.py "ServerType 鍖呭惈鍝簺缁勪欢锛?" --top-k 5
+python tools/ask_kb.py "ServerType 鍖呭惈鍝簺缁勪欢锛?" --offline
+```
+
+The command prints the answer mode, Part 5 citation labels, and retrieved record IDs. Keep API secrets in environment variables.
 
 每个 CLI 也支持 `--help`：
 
