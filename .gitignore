@@ -6,6 +6,7 @@ __pycache__/
 venv/
 env/
 *.log
+config.toml
 exports/
 *.md
 docs/
