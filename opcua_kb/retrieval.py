@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from .api import KnowledgeBase
+from .embeddings import EmbeddingError, EmbeddingProvider
+from .vector_index import VectorIndex, VectorIndexError
 
 
 @dataclass(frozen=True)
@@ -24,8 +26,23 @@ class RetrievedRecord:
 class Part5Retriever:
     """Normalize KnowledgeBase results while enforcing the Part 5 boundary."""
 
-    def __init__(self, knowledge_base: KnowledgeBase):
+    def __init__(
+        self,
+        knowledge_base: KnowledgeBase,
+        *,
+        vector_index: VectorIndex | None = None,
+        embedding_provider: EmbeddingProvider | None = None,
+        vector_weight: float = 0.45,
+        fts_weight: float = 0.55,
+    ):
+        if vector_weight < 0 or fts_weight < 0 or vector_weight + fts_weight <= 0:
+            raise ValueError("retrieval weights must be non-negative and not both zero")
         self.knowledge_base = knowledge_base
+        self.vector_index = vector_index
+        self.embedding_provider = embedding_provider
+        self.vector_weight = vector_weight
+        self.fts_weight = fts_weight
+        self.last_mode = "fts"
         self._validate_part5_root()
 
     def _validate_part5_root(self) -> None:
@@ -51,7 +68,28 @@ class Part5Retriever:
         if relationship_depth < 0:
             raise ValueError("relationship_depth must be non-negative")
 
-        results = self.knowledge_base.search(question, top_k=top_k)
+        candidate_limit = max(top_k * 3, 20)
+        results = self.knowledge_base.search(question, top_k=candidate_limit)
+        exact_results = [
+            result for result in results if result.get("type") in {"entity", "table", "chapter"}
+        ]
+        fts_results = [result for result in results if result not in exact_results]
+        vector_results: list[dict[str, Any]] = []
+        vector_available = self.vector_index is not None and self.embedding_provider is not None
+        if vector_available:
+            try:
+                vector_results = self.vector_index.search(
+                    question, self.embedding_provider, top_k=candidate_limit
+                )
+            except (EmbeddingError, VectorIndexError):
+                vector_available = False
+        if vector_available:
+            self.last_mode = "hybrid"
+        elif exact_results and not fts_results:
+            self.last_mode = "exact"
+        else:
+            self.last_mode = "fts"
+        primary_results = exact_results + self._fuse_candidates(fts_results, vector_results)
         records: list[RetrievedRecord] = []
         seen: set[str] = set()
 
@@ -75,7 +113,7 @@ class Part5Retriever:
                 )
             )
 
-        for result in results:
+        for result in primary_results:
             add(dict(result), fallback_type="chunk")
             if relationship_depth and result.get("type") == "entity":
                 entity = self.knowledge_base.get_entity(result.get("id", ""))
@@ -95,3 +133,30 @@ class Part5Retriever:
             if len(records) >= top_k:
                 break
         return records[:top_k]
+
+    def _fuse_candidates(
+        self, fts_results: list[dict[str, Any]], vector_results: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Fuse non-exact candidates with stable weighted reciprocal-rank scores."""
+
+        if not vector_results:
+            return fts_results
+        candidates: dict[str, dict[str, Any]] = {}
+        scores: dict[str, float] = {}
+        for rank, result in enumerate(fts_results, start=1):
+            record_id = result.get("id")
+            if not isinstance(record_id, str):
+                continue
+            candidates.setdefault(record_id, result)
+            scores[record_id] = scores.get(record_id, 0.0) + self.fts_weight / rank
+        for rank, result in enumerate(vector_results, start=1):
+            record_id = result.get("id")
+            if not isinstance(record_id, str):
+                continue
+            candidates.setdefault(record_id, result)
+            scores[record_id] = scores.get(record_id, 0.0) + self.vector_weight / rank
+        order = {record_id: index for index, record_id in enumerate(candidates)}
+        return [
+            candidates[record_id]
+            for record_id in sorted(candidates, key=lambda item: (-scores[item], order[item]))
+        ]

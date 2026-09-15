@@ -13,8 +13,10 @@ if str(ROOT) not in sys.path:
 
 from opcua_kb import KnowledgeBase, RAGPipeline
 from opcua_kb.cli import run_cli
+from opcua_kb.embeddings import EmbeddingError, SentenceTransformerEmbeddingProvider
 from opcua_kb.llm import LLMError, OpenAICompatibleChatModel
 from opcua_kb.retrieval import Part5Retriever
+from opcua_kb.vector_index import VectorIndex
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -37,6 +39,8 @@ def main() -> None:
     parser.add_argument("--relationship-depth", type=int, default=0, help="Relationship hops to include. Default: 0.")
     parser.add_argument("--offline", action="store_true", help="Use deterministic local retrieval output without an LLM.")
     parser.add_argument("--root", default=str(ROOT), help="Knowledge base project root. Default: repository root.")
+    parser.add_argument("--no-embeddings", action="store_true", help="Disable optional vector retrieval and use FTS5 only.")
+    parser.add_argument("--embedding-model", default=None, help="Local sentence-transformers model name.")
     args = parser.parse_args()
     run_cli(lambda: _run(args))
 
@@ -54,11 +58,13 @@ def _run(args: argparse.Namespace) -> None:
             )
         except LLMError as exc:
             raise ValueError(str(exc)) from exc
+    retriever = _build_retriever(args)
     result = RAGPipeline(
-        retriever=Part5Retriever(KnowledgeBase(args.root)),
+        retriever=retriever,
         chat_model=chat_model,
     ).ask(args.question, top_k=args.top_k, relationship_depth=args.relationship_depth)
     print(f"模式 / Mode: {result.mode}")
+    print(f"retrieval={retriever.last_mode}")
     print(result.answer)
     print("引用 / 寮曠敤:")
     for citation in result.citations:
@@ -68,6 +74,45 @@ def _run(args: argparse.Namespace) -> None:
         print(f"  {item['label']} {item['id']} [{item['type']}]")
     if result.error:
         print(f"模型错误 / Model error: {result.error}", file=sys.stderr)
+
+
+def _build_retriever(args: argparse.Namespace) -> Part5Retriever:
+    """Create a Part 5 retriever with an optional, source-validated vector index."""
+
+    root = Path(args.root)
+    if args.no_embeddings:
+        return Part5Retriever(KnowledgeBase(root))
+
+    vector_path = root / "indexes" / "embeddings.jsonl"
+    metadata_path = root / "indexes" / "embeddings.meta.json"
+    manifest_path = root / "source" / "source_manifest.json"
+    if not vector_path.exists() or not metadata_path.exists():
+        return Part5Retriever(KnowledgeBase(root))
+
+    source_hash = None
+    try:
+        import json
+
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if isinstance(manifest, dict) and isinstance(manifest.get("sha256"), str):
+            source_hash = manifest["sha256"]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        source_hash = None
+
+    if not source_hash:
+        return Part5Retriever(KnowledgeBase(root))
+
+    try:
+        provider = SentenceTransformerEmbeddingProvider(
+            args.embedding_model or "sentence-transformers/all-MiniLM-L6-v2"
+        )
+    except EmbeddingError:
+        return Part5Retriever(KnowledgeBase(root))
+    return Part5Retriever(
+        KnowledgeBase(root),
+        vector_index=VectorIndex(root, source_hash=source_hash),
+        embedding_provider=provider,
+    )
 
 
 if __name__ == "__main__":

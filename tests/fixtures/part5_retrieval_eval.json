@@ -1,0 +1,27 @@
+[
+  {
+    "question": "What is ServerType?",
+    "expected_ids": ["ObjectType:ServerType"]
+  },
+  {
+    "question": "ServerType components and properties",
+    "expected_ids": ["ObjectType:ServerType"]
+  },
+  {
+    "question": "Table 9 ServerType definition",
+    "expected_ids": ["table-9"]
+  },
+  {
+    "question": "Section 6.3.1 ServerType",
+    "expected_ids": ["sec-6.3.1", "ObjectType:ServerType"]
+  },
+  {
+    "question": "What is ServerStatusDataType?",
+    "expected_ids": ["DataType:ServerStatusDataType"]
+  },
+  {
+    "question": "What does ServerType define in its relationships?",
+    "expected_ids": ["table-9", "sec-6.3.1", "ObjectType:ServerType"],
+    "relationship_depth": 1
+  }
+]

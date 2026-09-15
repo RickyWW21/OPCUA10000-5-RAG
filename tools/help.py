@@ -23,6 +23,7 @@ Available data / 可用数据
   kb/chunks.jsonl          Text chunks for full-text retrieval
   kb/aliases.json          Entity aliases for case-insensitive lookup
   indexes/fts.sqlite       SQLite FTS5 full-text index
+  indexes/embeddings.jsonl Optional local vector index for hybrid retrieval
 
 Main commands / 主要命令
   python tools/help.py
@@ -126,6 +127,12 @@ Notes / 注意事项
 
   python tools/ask_kb.py "ServerType" --offline
       Use deterministic local retrieval output without an API call.
+
+  python tools/ask_kb.py "ServerType" --offline --no-embeddings
+      Force exact-match and SQLite FTS5 retrieval without the optional vector index.
+
+  python tools/evaluate_retrieval.py
+      Report Recall@1 and Recall@3 on the Part 5 retrieval fixture.
 """.strip()
 
 

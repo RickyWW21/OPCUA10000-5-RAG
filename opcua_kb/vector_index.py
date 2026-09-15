@@ -9,7 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .embeddings import EmbeddingError, EmbeddingProvider, cosine_similarity
+try:
+    from .embeddings import EmbeddingError, EmbeddingProvider, cosine_similarity
+except ImportError:
+    from embeddings import EmbeddingError, EmbeddingProvider, cosine_similarity
 
 
 class VectorIndexError(RuntimeError):
