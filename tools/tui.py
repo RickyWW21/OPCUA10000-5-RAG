@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import sys
 import webbrowser
 from pathlib import Path
@@ -40,8 +41,72 @@ except ImportError as exc:
     )
     raise SystemExit(2) from exc
 
-from opcua_kb import KnowledgeBase, write_graph_html, write_graph_json
+from opcua_kb import KnowledgeBase, RAGPipeline, write_graph_html, write_graph_json
+from opcua_kb.embeddings import EmbeddingError, SentenceTransformerEmbeddingProvider
 from opcua_kb.errors import format_action_error
+from opcua_kb.llm import LLMError, OpenAICompatibleChatModel
+from opcua_kb.retrieval import Part5Retriever
+from opcua_kb.rag import RAGAnswer
+from opcua_kb.vector_index import VectorIndex
+
+
+RAG_MODE_OPTIONS = [
+    ("自动 / Auto", "auto"),
+    ("混合 / Hybrid", "hybrid"),
+    ("仅 FTS5 / FTS5", "fts"),
+]
+
+
+def build_rag_retriever(
+    root: str | Path, *, mode: str = "auto", embedding_model: str | None = None
+) -> Part5Retriever:
+    """Build a verified Part 5 retriever for the TUI search workflow."""
+
+    if mode not in {"auto", "hybrid", "fts"}:
+        raise ValueError("retrieval mode must be auto, hybrid, or fts")
+    root = Path(root)
+    knowledge_base = KnowledgeBase(root)
+    if mode == "fts":
+        return Part5Retriever(knowledge_base)
+
+    vector_path = root / "indexes" / "embeddings.jsonl"
+    metadata_path = root / "indexes" / "embeddings.meta.json"
+    manifest_path = root / "source" / "source_manifest.json"
+    if not vector_path.exists() or not metadata_path.exists():
+        return Part5Retriever(knowledge_base)
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        source_hash = manifest.get("sha256") if isinstance(manifest, dict) else None
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return Part5Retriever(knowledge_base)
+    if not isinstance(source_hash, str) or not source_hash:
+        return Part5Retriever(knowledge_base)
+    try:
+        provider = SentenceTransformerEmbeddingProvider(
+            embedding_model or "sentence-transformers/all-MiniLM-L6-v2"
+        )
+    except EmbeddingError:
+        return Part5Retriever(knowledge_base)
+    return Part5Retriever(
+        knowledge_base,
+        vector_index=VectorIndex(root, source_hash=source_hash),
+        embedding_provider=provider,
+    )
+
+
+def format_rag_answer(answer: RAGAnswer, *, retrieval_mode: str) -> str:
+    """Render a RAG answer, its modes, citations, and retrieval error in Markdown."""
+
+    lines = ["## RAG 回答", f"- 检索模式: `{retrieval_mode}`", f"- 生成模式: `{answer.mode}`", "", answer.answer]
+    if answer.citations:
+        lines.extend(["", "### 引用"])
+        lines.extend(
+            f"- {citation.get('label', '')} **{citation.get('title', citation.get('id', ''))}** `({citation.get('id', '')})`"
+            for citation in answer.citations
+        )
+    if answer.error:
+        lines.extend(["", f"> 模型回退: {answer.error}"])
+    return "\n".join(lines)
 
 
 RELATION_OPTIONS = [
@@ -183,12 +248,23 @@ class KnowledgeBaseTUI(App[None]):
         ("f1", "show_help", "帮助"),
     ]
 
-    def __init__(self, root: Path) -> None:
+    def __init__(
+        self,
+        root: Path,
+        *,
+        retrieval_mode: str = "auto",
+        embedding_model: str | None = None,
+        online: bool = False,
+    ) -> None:
         """Initialize one API instance and row-key maps shared by TUI events."""
 
         super().__init__()
         self.root = root
         self.kb = KnowledgeBase(root)
+        self.retrieval_mode = retrieval_mode
+        self.embedding_model = embedding_model
+        self.online = online
+        self._retrievers: dict[str, Part5Retriever] = {}
         self.search_results: dict[str, dict[str, Any]] = {}
         self.relation_results: dict[str, dict[str, Any]] = {}
 
@@ -211,6 +287,19 @@ class KnowledgeBaseTUI(App[None]):
                         allow_blank=False,
                         id="search-limit",
                     )
+                    yield Select(
+                        RAG_MODE_OPTIONS,
+                        value=self.retrieval_mode,
+                        allow_blank=False,
+                        id="rag-mode",
+                    )
+                    yield Select(
+                        [("深度 0", 0), ("深度 1", 1), ("深度 2", 2)],
+                        value=0,
+                        allow_blank=False,
+                        id="rag-depth",
+                    )
+                    yield Checkbox("在线生成", value=self.online, id="rag-online")
                     yield Button("搜索", variant="primary", id="search-button")
                 with Horizontal(classes="split"):
                     yield DataTable(id="search-results", classes="results", cursor_type="row")
@@ -400,8 +489,29 @@ class KnowledgeBaseTUI(App[None]):
             self.notify("请输入搜索内容。", severity="warning")
             return
         top_k = int(self.query_one("#search-limit", Select).value)
+        retrieval_mode = str(self.query_one("#rag-mode", Select).value)
+        relationship_depth = int(self.query_one("#rag-depth", Select).value)
+        online = self.query_one("#rag-online", Checkbox).value
         try:
-            results = self.kb.search(query, top_k=top_k)
+            self.kb.search(query, top_k=top_k)
+        except (OSError, ValueError) as exc:
+            message = format_action_error("搜索", exc)
+            self.query_one("#search-detail", Markdown).update(f"## 搜索失败\n\n{message}")
+            self._set_status(message)
+            self.notify(message, severity="error")
+            return
+        try:
+            retriever = self._get_rag_retriever(retrieval_mode)
+            pipeline = RAGPipeline(
+                retriever=retriever,
+                chat_model=self._get_chat_model(online),
+            )
+            answer = pipeline.ask(
+                query,
+                top_k=top_k,
+                relationship_depth=relationship_depth,
+            )
+            results = answer.retrieved
         except (OSError, ValueError) as exc:
             message = format_action_error("搜索", exc)
             self.query_one("#search-detail", Markdown).update(f"## 搜索失败\n\n{message}")
@@ -422,10 +532,37 @@ class KnowledgeBaseTUI(App[None]):
             )
         if results:
             table.move_cursor(row=0)
-            self.query_one("#search-detail", Markdown).update(self._format_search_result(results[0]))
+            self.query_one("#search-detail", Markdown).update(
+                format_rag_answer(answer, retrieval_mode=retriever.last_mode)
+            )
         else:
             self.query_one("#search-detail", Markdown).update(f"## 未找到结果\n\n查询：`{query}`")
-        self._set_status(f"搜索完成：{len(results)} 条结果")
+        self._set_status(
+            f"搜索完成：{len(results)} 条结果，检索模式：{retriever.last_mode}"
+        )
+
+    def _get_rag_retriever(self, mode: str) -> Part5Retriever:
+        """Cache one retriever per selected mode so model loading is not repeated."""
+
+        if mode not in self._retrievers:
+            self._retrievers[mode] = build_rag_retriever(
+                self.root, mode=mode, embedding_model=self.embedding_model
+            )
+        return self._retrievers[mode]
+
+    @staticmethod
+    def _get_chat_model(online: bool) -> OpenAICompatibleChatModel | None:
+        if not online:
+            return None
+        try:
+            return OpenAICompatibleChatModel(
+                api_key=os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY"),
+                model=os.getenv("DEEPSEEK_MODEL") or os.getenv("OPENAI_MODEL", "deepseek-chat"),
+                base_url=os.getenv("DEEPSEEK_BASE_URL")
+                or os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com"),
+            )
+        except LLMError:
+            return None
 
     def _show_entity(self) -> None:
         """Resolve the entity input and render its complete structured card."""
@@ -912,13 +1049,21 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="启动 OPC UA 10000-5 知识库 TUI。")
     parser.add_argument("--root", default=str(ROOT), help="知识库项目根目录。")
+    parser.add_argument("--retrieval-mode", choices=("auto", "hybrid", "fts"), default="auto")
+    parser.add_argument("--embedding-model", default=None, help="Local sentence-transformers model name.")
+    parser.add_argument("--offline", action="store_true", help="Disable online LLM generation in the TUI.")
     args = parser.parse_args()
     root = Path(args.root).resolve()
     required = [root / "kb" / "entities.jsonl", root / "indexes" / "fts.sqlite"]
     missing = [str(path) for path in required if not path.exists()]
     if missing:
         parser.error("知识库文件不存在：" + ", ".join(missing))
-    KnowledgeBaseTUI(root).run()
+    KnowledgeBaseTUI(
+        root,
+        retrieval_mode=args.retrieval_mode,
+        embedding_model=args.embedding_model,
+        online=not args.offline,
+    ).run()
 
 
 if __name__ == "__main__":
