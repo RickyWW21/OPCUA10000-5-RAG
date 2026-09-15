@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from .api import KnowledgeBase
@@ -24,6 +26,22 @@ class Part5Retriever:
 
     def __init__(self, knowledge_base: KnowledgeBase):
         self.knowledge_base = knowledge_base
+        self._validate_part5_root()
+
+    def _validate_part5_root(self) -> None:
+        """Require a manifest identifying real knowledge-base roots as Part 5."""
+
+        root = getattr(self.knowledge_base, "root", None)
+        if not isinstance(root, (str, Path)):
+            # Lightweight test doubles can provide explicit document metadata per row.
+            return
+        manifest_path = Path(root) / "source" / "source_manifest.json"
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"Knowledge base is not a verified OPC UA 10000-5 source: {manifest_path}") from exc
+        if not isinstance(manifest, dict) or manifest.get("doc") != "OPC-10000-5":
+            raise ValueError(f"Knowledge base is not a verified OPC UA 10000-5 source: {manifest_path}")
 
     def retrieve(
         self, question: str, *, top_k: int = 6, relationship_depth: int = 0

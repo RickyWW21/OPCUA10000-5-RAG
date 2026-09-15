@@ -1,10 +1,22 @@
-from unittest.mock import Mock
+import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import Mock
 
 from opcua_kb.retrieval import Part5Retriever
 
 
 class RetrievalTests(unittest.TestCase):
+    def _rooted_kb(self, manifest: object) -> Mock:
+        root = Path(tempfile.mkdtemp())
+        source = root / "source"
+        source.mkdir()
+        (source / "source_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        kb = Mock()
+        kb.root = root
+        return kb
+
     def test_retriever_keeps_exact_results_before_fts_results(self):
         kb = Mock()
         kb.search.return_value = [
@@ -31,6 +43,22 @@ class RetrievalTests(unittest.TestCase):
         with self.assertRaises(ValueError): Part5Retriever(kb).retrieve("x", top_k=0)
         with self.assertRaises(ValueError): Part5Retriever(kb).retrieve("x", relationship_depth=-1)
         self.assertEqual([r.id for r in Part5Retriever(kb).retrieve("x", relationship_depth=1)], ["e1", "e2"])
+
+    def test_rejects_unverified_or_foreign_knowledge_base_root(self):
+        foreign = self._rooted_kb({"doc": "OPC-10000-4"})
+        with self.assertRaises(ValueError):
+            Part5Retriever(foreign)
+
+        missing = Mock()
+        missing.root = Path(tempfile.mkdtemp())
+        with self.assertRaises(ValueError):
+            Part5Retriever(missing)
+
+    def test_accepts_verified_part5_knowledge_base_root(self):
+        kb = self._rooted_kb({"doc": "OPC-10000-5"})
+        kb.search.return_value = [{"type": "chunk", "id": "c1", "title": "Scope", "snippet": "Part 5"}]
+        records = Part5Retriever(kb).retrieve("scope")
+        self.assertEqual([record.id for record in records], ["c1"])
 
 
 if __name__ == "__main__":
