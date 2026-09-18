@@ -37,7 +37,10 @@ class SentenceTransformerEmbeddingProvider:
                 self._model = SentenceTransformer(
                     model_name, model_kwargs={"local_files_only": True}
                 )
-            dimension = self._model.get_sentence_embedding_dimension()
+            dimension_getter = getattr(self._model, "get_embedding_dimension", None)
+            if dimension_getter is None:
+                dimension_getter = self._model.get_sentence_embedding_dimension
+            dimension = dimension_getter()
         except Exception as exc:  # provider exceptions vary by installed version
             raise EmbeddingError(f"unable to load local embedding model: {model_name}") from exc
         if not isinstance(dimension, int) or dimension <= 0:
