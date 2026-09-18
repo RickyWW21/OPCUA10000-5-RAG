@@ -3,6 +3,10 @@ __pycache__/
 .Python
 .idea/
 .venv/
+models/
+.serena/
+indexes/embeddings.jsonl
+indexes/embeddings.meta.json
 venv/
 env/
 *.log
