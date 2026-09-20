@@ -18,7 +18,8 @@ if str(ROOT) not in sys.path:
 
 try:
     from textual.app import App, ComposeResult
-    from textual.containers import Horizontal
+    from textual.containers import Horizontal, Vertical
+    from textual.content import Content
     from textual.widgets import (
         Button,
         Checkbox,
@@ -55,6 +56,14 @@ RAG_MODE_OPTIONS = [
     ("混合 / Hybrid", "hybrid"),
     ("仅 FTS5 / FTS5", "fts"),
 ]
+
+
+class ReadableCheckbox(Checkbox):
+    """Render an explicit state label for terminals with weak color support."""
+
+    def render(self) -> Content:
+        state = "开启" if self.value else "关闭"
+        return Content(f"{self.label}：{state}")
 
 
 def build_rag_retriever(
@@ -170,6 +179,44 @@ class KnowledgeBaseTUI(App[None]):
         margin-right: 1;
     }
 
+    #search-controls {
+        height: auto;
+        margin-bottom: 1;
+    }
+
+    #search-input-row {
+        height: 3;
+        margin-bottom: 1;
+    }
+
+    #search-input-row Input {
+        width: 1fr;
+    }
+
+    #search-options-row {
+        height: auto;
+    }
+
+    #search-options-row Select {
+        width: 1fr;
+        min-width: 0;
+        height: 3;
+        margin-right: 1;
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    #search-options-row Checkbox {
+        width: auto;
+        min-width: 17;
+        margin-right: 1;
+    }
+
+    #search-options-row Button {
+        width: auto;
+        min-width: 12;
+    }
+
     .split {
         height: 1fr;
     }
@@ -276,31 +323,33 @@ class KnowledgeBaseTUI(App[None]):
         yield Header(show_clock=True, icon="命令")
         with TabbedContent(initial="search-tab"):
             with TabPane("搜索", id="search-tab"):
-                with Horizontal(classes="toolbar"):
-                    yield Input(
-                        placeholder="输入实体名、自然语言、章节号或表格号",
-                        id="search-query",
-                    )
-                    yield Select(
-                        [("5 条", 5), ("10 条", 10), ("20 条", 20), ("50 条", 50)],
-                        value=10,
-                        allow_blank=False,
-                        id="search-limit",
-                    )
-                    yield Select(
-                        RAG_MODE_OPTIONS,
-                        value=self.retrieval_mode,
-                        allow_blank=False,
-                        id="rag-mode",
-                    )
-                    yield Select(
-                        [("深度 0", 0), ("深度 1", 1), ("深度 2", 2)],
-                        value=0,
-                        allow_blank=False,
-                        id="rag-depth",
-                    )
-                    yield Checkbox("在线生成", value=self.online, id="rag-online")
-                    yield Button("搜索", variant="primary", id="search-button")
+                with Vertical(id="search-controls"):
+                    with Horizontal(id="search-input-row"):
+                        yield Input(
+                            placeholder="输入实体名、自然语言、章节号或表格号",
+                            id="search-query",
+                        )
+                    with Horizontal(id="search-options-row"):
+                        yield Select(
+                            [("5 条", 5), ("10 条", 10), ("20 条", 20), ("50 条", 50)],
+                            value=10,
+                            allow_blank=False,
+                            id="search-limit",
+                        )
+                        yield Select(
+                            RAG_MODE_OPTIONS,
+                            value=self.retrieval_mode,
+                            allow_blank=False,
+                            id="rag-mode",
+                        )
+                        yield Select(
+                            [("深度 0", 0), ("深度 1", 1), ("深度 2", 2)],
+                            value=0,
+                            allow_blank=False,
+                            id="rag-depth",
+                        )
+                        yield ReadableCheckbox("在线生成", value=self.online, id="rag-online")
+                        yield Button("搜索", variant="primary", id="search-button")
                 with Horizontal(classes="split"):
                     yield DataTable(id="search-results", classes="results", cursor_type="row")
                     yield Markdown(
