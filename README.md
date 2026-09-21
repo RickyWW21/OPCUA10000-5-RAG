@@ -35,15 +35,15 @@ python tools/help.py
 python tools/ask_kb.py "ServerType" --offline
 ```
 
-## Part 5 RAG 闂瓟
+## Part 5 RAG 问答
 
 ```powershell
 $env:DEEPSEEK_API_KEY = "..."
-python tools/ask_kb.py "ServerType 鍖呭惈鍝簺缁勪欢锛?" --top-k 5
-python tools/ask_kb.py "ServerType 鍖呭惈鍝簺缁勪欢锛?" --offline
+python tools/ask_kb.py "ServerType 包含哪些组件？" --top-k 5
+python tools/ask_kb.py "ServerType 包含哪些组件？" --offline
 ```
 
-The command prints the answer mode, Part 5 citation labels, and retrieved record IDs. Keep API secrets in environment variables.
+命令会输出回答模式、Part 5 引用标签和检索记录 ID。请将 API 密钥保存在环境变量中。
 
 每个 CLI 也支持 `--help`：
 
