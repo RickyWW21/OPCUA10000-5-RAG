@@ -131,6 +131,10 @@ Notes / 注意事项
   python tools/ask_kb.py "ServerType" --offline --no-embeddings
       Force exact-match and SQLite FTS5 retrieval without the optional vector index.
 
+  python -m pip install -r requirements-streamlit.txt
+  python -m streamlit run streamlit_app.py
+      Start the browser-based RAG workbench with chat history, retrieval controls, citations and evidence panels.
+
   python tools/evaluate_retrieval.py
       Report Recall@1 and Recall@3 on the Part 5 retrieval fixture.
 """.strip()

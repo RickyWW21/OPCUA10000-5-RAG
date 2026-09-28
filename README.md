@@ -82,6 +82,22 @@ python tui.py
 TUI 提供搜索、实体详情、关系追踪、章节/表格浏览，以及交互式知识图谱导出。
 使用 `Tab` 在控件间移动，`Enter` 执行操作，`Ctrl+F` 回到搜索，`Ctrl+Q` 退出。
 
+## Streamlit RAG Web 前端
+
+安装 Web 前端依赖：
+
+```powershell
+python -m pip install -r requirements-streamlit.txt
+```
+
+启动浏览器前端：
+
+```powershell
+python -m streamlit run streamlit_app.py
+```
+
+Web 前端支持多轮问答、`auto / hybrid / fts` 检索模式、证据数量、关系扩展深度、在线生成开关，以及回答引用和检索证据展开查看。语言模型仍通过 `DEEPSEEK_API_KEY` 或 `OPENAI_API_KEY` 环境变量配置。
+
 ## 知识图谱
 
 生成全局知识图谱：

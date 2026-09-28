@@ -91,9 +91,16 @@ class TuiRagTests(unittest.TestCase):
                     async with app.run_test(size=(width, 30)) as pilot:
                         await pilot.pause()
                         options_row = app.query_one("#search-options-row")
+                        limit = app.query_one("#search-limit")
+                        mode = app.query_one("#rag-mode")
+                        depth = app.query_one("#rag-depth")
                         checkbox = app.query_one("#rag-online")
                         self.assertLessEqual(checkbox.region.right, options_row.region.right)
-                        self.assertGreaterEqual(checkbox.region.width, 17)
+                        self.assertLessEqual(
+                            limit.region.width + mode.region.width + depth.region.width,
+                            39,
+                        )
+                        self.assertGreaterEqual(checkbox.region.width, 21)
 
         import asyncio
 

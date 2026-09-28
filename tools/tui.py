@@ -208,7 +208,7 @@ class KnowledgeBaseTUI(App[None]):
 
     #search-options-row Checkbox {
         width: auto;
-        min-width: 17;
+        min-width: 21;
         margin-right: 1;
     }
 
