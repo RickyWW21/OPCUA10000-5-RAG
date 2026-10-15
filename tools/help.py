@@ -135,6 +135,16 @@ Notes / 注意事项
   python -m streamlit run streamlit_app.py
       Start the browser-based RAG workbench with chat history, retrieval controls, citations and evidence panels.
 
+  python -m pip install -r requirements-api.txt
+  python -m uvicorn api_server:app --reload --port 8000
+      Start the FastAPI service. Interactive API docs are available at /docs.
+
+  cd web
+  npm.cmd install
+  npm.cmd run dev
+      Start the React RAG console. The Vite development server proxies /api to FastAPI.
+      React uses an anonymous HttpOnly session cookie; history is stored in data/rag_sessions.sqlite3.
+
   python tools/evaluate_retrieval.py
       Report Recall@1 and Recall@3 on the Part 5 retrieval fixture.
 """.strip()

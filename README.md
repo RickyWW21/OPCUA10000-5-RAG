@@ -98,6 +98,47 @@ python -m streamlit run streamlit_app.py
 
 Web 前端支持多轮问答、`auto / hybrid / fts` 检索模式、证据数量、关系扩展深度、在线生成开关，以及回答引用和检索证据展开查看。语言模型仍通过 `DEEPSEEK_API_KEY` 或 `OPENAI_API_KEY` 环境变量配置。
 
+## FastAPI + React 前端
+
+安装后端依赖：
+
+```powershell
+python -m pip install -r requirements-api.txt
+```
+
+启动 FastAPI：
+
+```powershell
+python -m uvicorn api_server:app --reload --port 8000
+```
+
+启动 React 开发前端：
+
+```powershell
+cd web
+npm.cmd install
+npm.cmd run dev
+```
+
+React 开发服务器默认通过 `/api` 代理到 `http://127.0.0.1:8000`。部署到不同域名时，用 `CORS_ORIGINS` 配置允许的前端来源，例如：
+
+```powershell
+$env:CORS_ORIGINS = "http://localhost:5173,https://rag.example.com"
+```
+
+FastAPI 提供 `/docs`、`/redoc` 和 `/openapi.json`，React 前端保留现有 Streamlit 前端不受影响。
+
+React 端使用匿名 `HttpOnly` Cookie 识别浏览器会话，不需要用户登录。会话、对话、消息、引用和检索证据默认保存在项目根目录的 `data/rag_sessions.sqlite3`。可通过环境变量调整：
+
+```powershell
+$env:SESSION_DB_PATH = "D:\rag-data\part5-sessions.sqlite3"
+$env:SESSION_TTL_DAYS = "30"
+$env:SESSION_COOKIE_SAMESITE = "lax"  # 跨站 HTTPS 部署可使用 none
+$env:SESSION_COOKIE_SECURE = "true"  # 仅 HTTPS 部署时启用
+```
+
+清除浏览器 Cookie 会创建新的匿名会话；不同浏览器默认互相隔离。建议仅在可信局域网使用匿名模式，并通过防火墙限制服务端口。
+
 ## 知识图谱
 
 生成全局知识图谱：
