@@ -21,6 +21,7 @@ class RetrievedRecord:
     section: str | None = None
     table_number: str | None = None
     doc: str = "OPC-10000-5"
+    evidence: str | None = None
 
 
 class Part5Retriever:
@@ -83,7 +84,7 @@ class Part5Retriever:
                 )
             except (EmbeddingError, VectorIndexError):
                 vector_available = False
-        if vector_available:
+        if vector_available and vector_results:
             self.last_mode = "hybrid"
         elif exact_results and not fts_results:
             self.last_mode = "exact"
@@ -101,15 +102,17 @@ class Part5Retriever:
             if not isinstance(record_id, str) or record_id in seen:
                 return
             seen.add(record_id)
+            record_type = str(raw.get("type") or fallback_type)
             records.append(
                 RetrievedRecord(
                     id=record_id,
-                    type=str(raw.get("type") or fallback_type),
+                    type=record_type,
                     title=str(raw.get("title") or raw.get("relation") or record_id),
                     snippet=str(raw.get("snippet") or raw.get("description") or ""),
                     section=raw.get("section"),
                     table_number=raw.get("table_number"),
                     doc=doc,
+                    evidence=self._evidence_text(record_id, record_type),
                 )
             )
 
@@ -133,6 +136,26 @@ class Part5Retriever:
             if len(records) >= top_k:
                 break
         return records[:top_k]
+
+    def _evidence_text(self, record_id: str, record_type: str) -> str | None:
+        """Hydrate original evidence through the public KnowledgeBase method.
+
+        Lightweight doubles without a real ``evidence`` method keep the search
+        snippet. A Mock attribute is not a string, so it is never mistaken for
+        hydrated evidence.
+        """
+
+        method = getattr(self.knowledge_base, "evidence", None)
+        if not callable(method):
+            return None
+        try:
+            value = method(record_id, record_type)
+        except TypeError:
+            # A partial test double may expose an incompatible signature.
+            return None
+        if isinstance(value, str) and value.strip():
+            return value
+        return None
 
     def _fuse_candidates(
         self, fts_results: list[dict[str, Any]], vector_results: list[dict[str, Any]]

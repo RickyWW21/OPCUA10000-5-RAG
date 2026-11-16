@@ -60,6 +60,38 @@ class RetrievalTests(unittest.TestCase):
         records = Part5Retriever(kb).retrieve("scope")
         self.assertEqual([record.id for record in records], ["c1"])
 
+    def test_hydrates_full_evidence_from_a_real_public_knowledge_base_method(self):
+        kb = Mock()
+        kb.search.return_value = [
+            {"type": "chunk", "id": "chunk-1", "title": "Scope", "snippet": "short"}
+        ]
+        kb.evidence.return_value = "complete original chunk text"
+
+        records = Part5Retriever(kb).retrieve("scope")
+
+        self.assertEqual("complete original chunk text", records[0].evidence)
+        self.assertEqual("short", records[0].snippet)
+        kb.evidence.assert_called_once_with("chunk-1", "chunk")
+
+    def test_lightweight_doubles_fall_back_to_snippet_instead_of_mock_attributes(self):
+        kb = Mock()
+        kb.search.return_value = [
+            {"type": "chunk", "id": "chunk-1", "title": "Scope", "snippet": "short"}
+        ]
+
+        records = Part5Retriever(kb).retrieve("scope")
+
+        self.assertEqual("short", records[0].snippet)
+        self.assertIsNone(records[0].evidence)
+
+    def test_retrieved_record_evidence_default_keeps_positional_compatibility(self):
+        from opcua_kb.retrieval import RetrievedRecord
+
+        record = RetrievedRecord("id", "chunk", "Title", "snippet")
+
+        self.assertIsNone(record.evidence)
+        self.assertEqual("OPC-10000-5", record.doc)
+
 
 if __name__ == "__main__":
     unittest.main()

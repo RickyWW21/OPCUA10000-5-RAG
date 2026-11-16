@@ -99,7 +99,7 @@ class VectorIndex:
         for order, row in enumerate(rows):
             try:
                 score = cosine_similarity(query_vector, row["vector"])
-            except ValueError as exc:
+            except (TypeError, ValueError) as exc:
                 raise VectorIndexError("vector index contains an invalid vector") from exc
             scored.append((score, order, row))
         scored.sort(key=lambda item: (-item[0], item[1]))
@@ -149,7 +149,13 @@ class VectorIndex:
         try:
             for line in lines:
                 row = json.loads(line)
-                if not isinstance(row, dict) or row.get("doc") != "OPC-10000-5":
+                if (
+                    not isinstance(row, dict)
+                    or row.get("doc") != "OPC-10000-5"
+                    or not isinstance(row.get("id"), str)
+                    or not row["id"].strip()
+                    or not isinstance(row.get("vector"), list)
+                ):
                     raise ValueError
                 rows.append(row)
         except (json.JSONDecodeError, ValueError) as exc:

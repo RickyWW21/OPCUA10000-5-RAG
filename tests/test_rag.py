@@ -10,9 +10,20 @@ class FixtureRetriever:
         return [RetrievedRecord("server-type", "entity", "ServerType", "A ServerType defines server metadata.")][:top_k]
 
 
+class EvidenceRetriever:
+    def __init__(self, records):
+        self.records = records
+
+    def retrieve(self, question, *, top_k=6, relationship_depth=0):
+        return self.records[:top_k]
+
+
 class RecordingChatModel:
-    def __init__(self, answer): self.answer, self.user_prompt = answer, ""
-    def generate(self, *, system, user, temperature=0.0): self.user_prompt = user; return self.answer
+    def __init__(self, answer): self.answer, self.user_prompt, self.calls = answer, "", 0
+    def generate(self, *, system, user, temperature=0.0):
+        self.calls += 1
+        self.user_prompt = user
+        return self.answer
 
 
 class FailingChatModel:
@@ -39,6 +50,216 @@ class RAGTests(unittest.TestCase):
         result = RAGPipeline(retriever=FixtureRetriever(), chat_model=FailingChatModel()).ask("x")
         self.assertEqual(result.mode, "offline")
         self.assertTrue(result.error)
+
+    def test_pipeline_sends_complete_evidence_beyond_the_search_snippet(self):
+        retriever = EvidenceRetriever(
+            [
+                RetrievedRecord(
+                    "chunk-sec-6.3.1-001",
+                    "chunk",
+                    "ServerType",
+                    "search snippet",
+                    evidence="Original chunk text. The table tail is only in the evidence body.",
+                )
+            ]
+        )
+        model = RecordingChatModel("The tail is present. [C1]")
+
+        result = RAGPipeline(retriever=retriever, chat_model=model, max_context_chars=2000).ask(
+            "What does the table tail say?"
+        )
+
+        self.assertEqual("generated", result.mode)
+        self.assertIn("The table tail is only in the evidence body.", model.user_prompt)
+        self.assertNotIn("search snippet", model.user_prompt)
+        self.assertIn("[C1]", model.user_prompt)
+        self.assertEqual("chunk-sec-6.3.1-001", result.retrieved[0]["id"])
+        self.assertEqual(
+            "Original chunk text. The table tail is only in the evidence body.",
+            result.retrieved[0]["snippet"],
+        )
+
+    def test_pipeline_labels_only_selected_evidence_and_discloses_omissions(self):
+        first = RetrievedRecord("e1", "entity", "First", "ignored", evidence="A" * 10)
+        second = RetrievedRecord("e2", "chunk", "Second", "ignored", evidence="B" * 10)
+        exact_unit = f"[E1] First\n{'A' * 10}"
+        model = RecordingChatModel("[E1] ok")
+
+        result = RAGPipeline(
+            retriever=EvidenceRetriever([first, second]),
+            chat_model=model,
+            max_context_chars=len(exact_unit),
+        ).ask("question")
+
+        self.assertEqual("generated", result.mode)
+        self.assertEqual(["e1"], [item["id"] for item in result.retrieved])
+        self.assertEqual(["[E1]"], [item["label"] for item in result.citations])
+        self.assertIn("A" * 10, model.user_prompt)
+        self.assertNotIn("B" * 10, model.user_prompt)
+        self.assertNotIn("[C1]", model.user_prompt)
+        self.assertIn("e2", result.error)
+
+    def test_pipeline_returns_offline_without_model_call_when_nothing_fits(self):
+        model = RecordingChatModel("[E1] impossible")
+        record = RetrievedRecord("e1", "entity", "First", "ignored", evidence="full evidence")
+
+        result = RAGPipeline(
+            retriever=EvidenceRetriever([record]),
+            chat_model=model,
+            max_context_chars=1,
+        ).ask("question")
+
+        self.assertEqual("offline", result.mode)
+        self.assertEqual(0, model.calls)
+        self.assertEqual([], result.citations)
+        self.assertEqual([], result.retrieved)
+        self.assertIn("e1", result.error)
+
+    def test_pipeline_skips_oversized_unit_without_cutting_table_rows(self):
+        table = RetrievedRecord(
+            "table-9",
+            "table",
+            "ServerType definition",
+            "ignored",
+            evidence="Attribute,Value\nBrowseName,ServerType\nlast-row,kept-intact",
+        )
+        chunk = RetrievedRecord("chunk-1", "chunk", "Small", "ignored", evidence="small body")
+        chunk_unit = "[C1] Small\nsmall body"
+        model = RecordingChatModel("[C1] ok")
+
+        result = RAGPipeline(
+            retriever=EvidenceRetriever([table, chunk]),
+            chat_model=model,
+            max_context_chars=len(chunk_unit),
+        ).ask("question")
+
+        self.assertEqual(["chunk-1"], [item["id"] for item in result.retrieved])
+        self.assertIn("small body", model.user_prompt)
+        self.assertNotIn("last-row,kept-intact", model.user_prompt)
+        self.assertIn("table-9", result.error)
+
+    def test_label_overhead_does_not_discard_a_later_fitting_unit(self):
+        records = [
+            RetrievedRecord("large", "entity", "Large", "", evidence="x" * 17),
+            RetrievedRecord("small", "chunk", "S", "", evidence="ok"),
+        ]
+        model = RecordingChatModel("Small evidence. [C1]")
+        result = RAGPipeline(
+            retriever=EvidenceRetriever(records), chat_model=model, max_context_chars=23
+        ).ask("question")
+
+        self.assertEqual("generated", result.mode)
+        self.assertEqual(["small"], [item["id"] for item in result.retrieved])
+        context = model.user_prompt.split("Part 5 evidence:\n", 1)[1]
+        self.assertEqual("[C1] S\nok", context)
+        self.assertLessEqual(len(context), 23)
+        self.assertIn("large", result.error)
+
+    def test_no_evidence_never_calls_the_model(self):
+        model = RecordingChatModel("Unfounded answer. [E1]")
+        result = RAGPipeline(
+            retriever=EvidenceRetriever([]), chat_model=model
+        ).ask("question")
+
+        self.assertEqual("offline", result.mode)
+        self.assertEqual(0, model.calls)
+        self.assertEqual([], result.citations)
+        self.assertEqual([], result.retrieved)
+
+    def test_pipeline_keeps_whole_evidence_at_exact_budget_boundary(self):
+        evidence = "row1\nrow2\nrow3"
+        record = RetrievedRecord("table-9", "table", "Table", "ignored", evidence=evidence)
+        exact_unit = f"[T1] Table\n{evidence}"
+        model = RecordingChatModel("[T1] ok")
+
+        result = RAGPipeline(
+            retriever=EvidenceRetriever([record]),
+            chat_model=model,
+            max_context_chars=len(exact_unit),
+        ).ask("question")
+
+        self.assertEqual("generated", result.mode)
+        self.assertIn(evidence, model.user_prompt)
+        self.assertEqual(["[T1]"], [item["label"] for item in result.citations])
+
+    def test_pipeline_rejects_missing_or_malformed_generated_citations(self):
+        record = RetrievedRecord("e1", "entity", "First", "ignored", evidence="full evidence")
+        for answer in (
+            "", "An answer without sources.", "[E0]", "[Eabc]", "[E1, E99]",
+            "[E2]", "[E1] and [E9]", "[E1] and [X99]", "[E1] and [e1]",
+            "[E1] and [T99", "[E1] and [X99\nMore text.",
+        ):
+            with self.subTest(answer=answer):
+                model = RecordingChatModel(answer)
+                result = RAGPipeline(
+                    retriever=EvidenceRetriever([record]),
+                    chat_model=model,
+                    max_context_chars=2000,
+                ).ask("question")
+
+                self.assertEqual("offline", result.mode)
+                self.assertTrue(result.error)
+                self.assertEqual(["[E1]"], [item["label"] for item in result.citations])
+                self.assertIn("[E1]", result.answer)
+
+    def test_pipeline_accepts_each_documented_canonical_label_prefix(self):
+        records = [
+            RetrievedRecord("e1", "entity", "Entity", "ignored", evidence="entity body"),
+            RetrievedRecord("t1", "table", "Table", "ignored", evidence="table body"),
+            RetrievedRecord("c1", "chunk", "Chunk", "ignored", evidence="chunk body"),
+            RetrievedRecord(
+                "r1", "relationship", "HAS_COMPONENT", "e1 HAS_COMPONENT e2"
+            ),
+        ]
+        for answer, label in (
+            ("[E1] ok", "[E1]"),
+            ("[T1] ok", "[T1]"),
+            ("[C1] ok", "[C1]"),
+            ("[R1] ok", "[R1]"),
+        ):
+            with self.subTest(label=label):
+                model = RecordingChatModel(answer)
+                result = RAGPipeline(
+                    retriever=EvidenceRetriever(records),
+                    chat_model=model,
+                    max_context_chars=2000,
+                ).ask("question")
+
+                self.assertEqual("generated", result.mode)
+                self.assertIn(label, [item["label"] for item in result.citations])
+
+    def test_pipeline_offline_fallback_uses_complete_selected_evidence(self):
+        record = RetrievedRecord(
+            "chunk-1",
+            "chunk",
+            "Scope",
+            "short snippet",
+            evidence="Full original chunk text, including rows beyond the snippet.",
+        )
+
+        result = RAGPipeline(
+            retriever=EvidenceRetriever([record]), max_context_chars=2000
+        ).ask("question")
+
+        self.assertEqual("offline", result.mode)
+        self.assertIn("Full original chunk text", result.answer)
+        self.assertEqual(["[C1]"], [item["label"] for item in result.citations])
+
+    def test_relationship_boundary_snippet_is_preserved(self):
+        record = RetrievedRecord(
+            "e2", "relationship", "HAS_COMPONENT", "e1 HAS_COMPONENT e2"
+        )
+        model = RecordingChatModel("[R1] ok")
+
+        result = RAGPipeline(
+            retriever=EvidenceRetriever([record]),
+            chat_model=model,
+            max_context_chars=2000,
+        ).ask("question")
+
+        self.assertIn("e1 HAS_COMPONENT e2", model.user_prompt)
+        self.assertEqual("e2", result.retrieved[0]["id"])
+        self.assertEqual("[R1]", result.citations[0]["label"])
 
 
 if __name__ == "__main__": unittest.main()
