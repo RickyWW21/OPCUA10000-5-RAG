@@ -24,7 +24,10 @@ class KnowledgeBase:
         self._entities: dict[str, dict[str, Any]] | None = None
         self._aliases: dict[str, str] | None = None
         self._chapters: dict[str, dict[str, Any]] | None = None
+        self._chapters_by_id: dict[str, dict[str, Any]] | None = None
         self._tables: dict[str, dict[str, Any]] | None = None
+        self._tables_by_id: dict[str, dict[str, Any]] | None = None
+        self._chunks: dict[str, dict[str, Any]] | None = None
         self._relationships: list[dict[str, Any]] | None = None
         self._relationships_by_source: dict[str, list[dict[str, Any]]] | None = None
 
@@ -93,6 +96,30 @@ class KnowledgeBase:
         """Return one table by numeric or annex-style identifier such as ``C.1``."""
 
         return self._load_tables().get(str(number).lower())
+
+    def evidence(self, record_id: str, record_type: str) -> str | None:
+        """Return the complete original evidence text for a search result.
+
+        Chapters return their full text, tables every original raw line
+        (including the header), chunks the original chunk text rather than the
+        FTS snippet, and entities their English summary, structured definition,
+        and defining table or original chapter. Relationships have no separate
+        hydrated text and keep their boundary snippet in the retriever.
+        """
+
+        if not isinstance(record_id, str) or not record_id.strip():
+            return None
+        if not isinstance(record_type, str):
+            return None
+        if record_type == "entity":
+            return self._entity_evidence(record_id)
+        if record_type == "table":
+            return self._table_evidence(record_id)
+        if record_type == "chapter":
+            return self._chapter_evidence(record_id)
+        if record_type == "chunk":
+            return self._chunk_evidence(record_id)
+        return None
 
     def graph(
         self,
@@ -232,12 +259,155 @@ class KnowledgeBase:
             self._chapters = {item["section"]: item for item in _read_jsonl(self.kb_dir / "chapters.jsonl")}
         return self._chapters
 
+    def _load_chapters_by_id(self) -> dict[str, dict[str, Any]]:
+        """Load and cache chapter records keyed by canonical chunk-facing ID."""
+
+        if self._chapters_by_id is None:
+            self._chapters_by_id = {
+                item["id"]: item
+                for item in self._load_chapters().values()
+                if isinstance(item.get("id"), str)
+            }
+        return self._chapters_by_id
+
     def _load_tables(self) -> dict[str, dict[str, Any]]:
         """Load and cache tables using lowercase string identifiers."""
 
         if self._tables is None:
             self._tables = {str(item["number"]).lower(): item for item in _read_jsonl(self.kb_dir / "tables.jsonl")}
         return self._tables
+
+    def _load_tables_by_id(self) -> dict[str, dict[str, Any]]:
+        """Load and cache table records keyed by canonical ID such as ``table-9``."""
+
+        if self._tables_by_id is None:
+            self._tables_by_id = {
+                item["id"]: item
+                for item in self._load_tables().values()
+                if isinstance(item.get("id"), str)
+            }
+        return self._tables_by_id
+
+    def _load_chunks(self) -> dict[str, dict[str, Any]]:
+        """Load and cache original chunk records keyed by canonical chunk ID."""
+
+        if self._chunks is None:
+            self._chunks = {
+                item["id"]: item
+                for item in _read_jsonl(self.kb_dir / "chunks.jsonl")
+                if isinstance(item.get("id"), str)
+            }
+        return self._chunks
+
+    def _entity_evidence(self, record_id: str) -> str | None:
+        """Compose full entity evidence from summary, structure, and definition."""
+
+        entity = self._load_entities().get(record_id) or self.get_entity(record_id)
+        if not entity:
+            return None
+        name = entity.get("name") or record_id
+        parts = [f"Entity: {name}"]
+        if entity.get("kind"):
+            parts.append(f"Kind: {entity['kind']}")
+        if entity.get("section"):
+            parts.append(f"Section: {entity['section']}")
+        if entity.get("supertype"):
+            parts.append(f"Supertype: {entity['supertype']}")
+        if entity.get("summary_en"):
+            parts.append(f"English summary: {entity['summary_en']}")
+        elif entity.get("summary_zh"):
+            parts.append(f"Summary: {entity['summary_zh']}")
+        attributes = entity.get("attributes")
+        if isinstance(attributes, dict) and attributes:
+            parts.append(
+                "Attributes: "
+                + ", ".join(f"{key}={value}" for key, value in attributes.items())
+            )
+        components = entity.get("components")
+        if isinstance(components, list) and components:
+            lines = [
+                _component_line(component)
+                for component in components
+                if isinstance(component, dict) and component.get("browse_name")
+            ]
+            if lines:
+                parts.append("Components:\n" + "\n".join(lines))
+        fields = entity.get("fields")
+        if isinstance(fields, list) and fields:
+            lines = [
+                _field_line(field)
+                for field in fields
+                if isinstance(field, dict) and field.get("name")
+            ]
+            if lines:
+                parts.append("Fields:\n" + "\n".join(lines))
+        enum_values = entity.get("enum_values")
+        if isinstance(enum_values, list) and enum_values:
+            parts.append(
+                "Enum values: "
+                + ", ".join(
+                    value.get("name", str(value))
+                    if isinstance(value, dict)
+                    else str(value)
+                    for value in enum_values
+                )
+            )
+
+        defining_tables = 0
+        for table_ref in entity.get("related_tables") or []:
+            table = self._table_by_reference(table_ref)
+            if table is None:
+                continue
+            lines = _table_raw_lines(table)
+            if not lines:
+                continue
+            defining_tables += 1
+            parts.append(
+                f"Defining Table {table.get('number', table.get('id', table_ref))}"
+                f" - {table.get('caption', '')}:\n{lines}"
+            )
+        if not defining_tables:
+            chapter = self.chapter(entity.get("section", "")) if entity.get("section") else None
+            if chapter and isinstance(chapter.get("text"), str) and chapter["text"].strip():
+                parts.append(f"Chapter {chapter.get('section', '')}:\n{chapter['text']}")
+        return "\n\n".join(parts)
+
+    def _table_by_reference(self, reference: Any) -> dict[str, Any] | None:
+        if not isinstance(reference, str):
+            return None
+        return self._load_tables_by_id().get(reference) or self._load_tables().get(
+            reference.lower()
+        )
+
+    def _table_evidence(self, record_id: str) -> str | None:
+        """Return every original table raw line, including the header."""
+
+        table = self._load_tables_by_id().get(record_id) or self._load_tables().get(
+            record_id.lower()
+        )
+        if table is None:
+            return None
+        return _table_raw_lines(table) or None
+
+    def _chapter_evidence(self, record_id: str) -> str | None:
+        """Return one chapter's complete original text."""
+
+        chapter = self._load_chapters_by_id().get(record_id) or self._load_chapters().get(
+            record_id
+        )
+        if chapter is None:
+            return None
+        text = chapter.get("text")
+        return text if isinstance(text, str) and text.strip() else None
+
+    def _chunk_evidence(self, record_id: str) -> str | None:
+        """Return the original chunk text rather than the FTS search snippet."""
+
+        chunk = self._load_chunks().get(record_id)
+        if chunk is None:
+            return None
+        text = chunk.get("text")
+        return text if isinstance(text, str) and text.strip() else None
 
     def _load_relationships(self) -> list[dict[str, Any]]:
         """Load and cache the ordered relationship records on first access."""
@@ -292,6 +462,44 @@ def _entity_result(entity: dict[str, Any]) -> dict[str, Any]:
         "table_number": ",".join(str(t).replace("table-", "") for t in entity.get("related_tables", [])),
         "snippet": entity.get("summary_zh") or entity.get("summary_en", ""),
     }
+
+
+def _component_line(component: dict[str, Any]) -> str:
+    """Render one structured instance declaration without losing its facts."""
+
+    details = [
+        f"{label}={component[key]}"
+        for key, label in (
+            ("node_class", "node_class"),
+            ("data_type", "data_type"),
+            ("reference_type", "reference_type"),
+            ("type_definition", "type_definition"),
+            ("modelling_rule", "modelling_rule"),
+        )
+        if component.get(key) not in (None, "")
+    ]
+    line = f"- {component['browse_name']}"
+    return f"{line}: {', '.join(details)}" if details else line
+
+
+def _field_line(field: dict[str, Any]) -> str:
+    """Render one DataType field, including its description when present."""
+
+    line = f"- {field['name']}"
+    if field.get("type"):
+        line += f" ({field['type']})"
+    if field.get("description"):
+        line += f": {field['description']}"
+    return line
+
+
+def _table_raw_lines(table: dict[str, Any]) -> str:
+    """Join every original table line, preserving the header and row boundaries."""
+
+    raw_lines = table.get("raw_lines")
+    if not isinstance(raw_lines, list):
+        return ""
+    return "\n".join(line for line in raw_lines if isinstance(line, str))
 
 
 def _fts_match_rows(

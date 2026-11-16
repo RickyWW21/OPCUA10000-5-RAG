@@ -1,27 +1,108 @@
 [
   {
     "question": "What is ServerType?",
-    "expected_ids": ["ObjectType:ServerType"]
+    "expected_ids": ["ObjectType:ServerType"],
+    "category": "positive"
   },
   {
     "question": "ServerType components and properties",
-    "expected_ids": ["ObjectType:ServerType"]
+    "expected_ids": ["ObjectType:ServerType"],
+    "category": "positive"
   },
   {
     "question": "Table 9 ServerType definition",
-    "expected_ids": ["table-9"]
+    "expected_ids": ["table-9"],
+    "category": "positive"
   },
   {
     "question": "Section 6.3.1 ServerType",
-    "expected_ids": ["sec-6.3.1", "ObjectType:ServerType"]
+    "expected_ids": ["sec-6.3.1", "ObjectType:ServerType"],
+    "category": "positive"
   },
   {
     "question": "What is ServerStatusDataType?",
-    "expected_ids": ["DataType:ServerStatusDataType"]
+    "expected_ids": ["DataType:ServerStatusDataType"],
+    "category": "positive"
   },
   {
     "question": "What does ServerType define in its relationships?",
     "expected_ids": ["table-9", "sec-6.3.1", "ObjectType:ServerType"],
-    "relationship_depth": 1
+    "relationship_depth": 1,
+    "category": "positive"
+  },
+  {
+    "question": "ServerType 包含哪些组件？",
+    "expected_ids": ["ObjectType:ServerType"],
+    "category": "positive"
+  },
+  {
+    "question": "ServerStatusDataType 的字段有哪些？",
+    "expected_ids": ["DataType:ServerStatusDataType", "table-242"],
+    "category": "positive"
+  },
+  {
+    "question": "Table 242 ServerStatusDataType structure",
+    "expected_ids": ["table-242"],
+    "category": "positive"
+  },
+  {
+    "question": "AuditSecurityEventType definition",
+    "expected_ids": ["EventType:AuditSecurityEventType"],
+    "category": "positive"
+  },
+  {
+    "question": "BuildInfo 数据类型包含哪些字段？",
+    "expected_ids": ["DataType:BuildInfo"],
+    "category": "positive"
+  },
+  {
+    "question": "What is the scope of Part 5?",
+    "expected_ids": ["sec-1"],
+    "category": "positive"
+  },
+  {
+    "question": "Which DataType contains productName and softwareVersion?",
+    "expected_ids": ["DataType:BuildInfo"],
+    "category": "positive"
+  },
+  {
+    "question": "What structure carries the server's currentTime and shutdownReason?",
+    "expected_ids": ["DataType:ServerStatusDataType"],
+    "category": "positive"
+  },
+  {
+    "question": "ServerType 与 Table 9 的定义",
+    "expected_ids": ["ObjectType:ServerType", "table-9"],
+    "category": "positive"
+  },
+  {
+    "question": "Section 12.10 ServerStatusDataType",
+    "expected_ids": ["sec-12.10", "DataType:ServerStatusDataType"],
+    "category": "positive"
+  },
+  {
+    "question": "服务器状态数据类型包含哪些字段？",
+    "expected_ids": ["DataType:ServerStatusDataType"],
+    "category": "positive"
+  },
+  {
+    "question": "What is the weather in Shanghai today?",
+    "expected_ids": [],
+    "category": "out_of_scope"
+  },
+  {
+    "question": "Who won the 2022 FIFA World Cup?",
+    "expected_ids": [],
+    "category": "out_of_scope"
+  },
+  {
+    "question": "What is its data type?",
+    "expected_ids": [],
+    "category": "context_dependent"
+  },
+  {
+    "question": "How does that compare to the previous version?",
+    "expected_ids": [],
+    "category": "context_dependent"
   }
 ]

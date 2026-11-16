@@ -52,6 +52,21 @@ class VectorIndexTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             index.build(self.records, self.provider, source_hash="")
 
+    def test_malformed_rows_raise_the_vector_error_used_by_all_callers(self):
+        index = VectorIndex(self.root)
+        index.build(self.records, self.provider, source_hash="abc")
+        rows = [
+            {"doc": "OPC-10000-5", "id": "e1"},
+            {"doc": "OPC-10000-5", "vector": [1, 0]},
+            {"doc": "OPC-10000-5", "id": "e1", "vector": [None, 0]},
+            {"doc": "OPC-10000-5", "id": "e1", "vector": "bad-vector"},
+        ]
+        for row in rows:
+            with self.subTest(row=row):
+                index.vectors_path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+                with self.assertRaises(VectorIndexError):
+                    index.search("server", self.provider, top_k=1)
+
 
 if __name__ == "__main__":
     unittest.main()

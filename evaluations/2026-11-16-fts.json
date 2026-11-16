@@ -1,0 +1,508 @@
+{
+  "doc": "OPC-10000-5",
+  "queries": 17,
+  "case_count": 21,
+  "hit_at_1": 0.6470588235294118,
+  "hit_at_3": 0.8823529411764706,
+  "recall_at_1": 0.4901960784313726,
+  "recall_at_3": 0.8529411764705882,
+  "mrr": 0.7450980392156863,
+  "latency_ms": 7.276705882352941,
+  "requested_mode": "fts",
+  "actual_modes": [
+    "fts"
+  ],
+  "results": [
+    {
+      "question": "What is ServerType?",
+      "category": "positive",
+      "expected_ids": [
+        "ObjectType:ServerType"
+      ],
+      "retrieved_ids": [
+        "ObjectType:ServerType",
+        "table-16",
+        "sec-6.3.7"
+      ],
+      "latency_ms": 20.625,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 0,
+      "hit_at_1": 1,
+      "hit_at_3": 1,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "mrr": 1
+    },
+    {
+      "question": "ServerType components and properties",
+      "category": "positive",
+      "expected_ids": [
+        "ObjectType:ServerType"
+      ],
+      "retrieved_ids": [
+        "ObjectType:ServerType",
+        "sec-7.1",
+        "table-2"
+      ],
+      "latency_ms": 5.86,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 0,
+      "hit_at_1": 1,
+      "hit_at_3": 1,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "mrr": 1
+    },
+    {
+      "question": "Table 9 ServerType definition",
+      "category": "positive",
+      "expected_ids": [
+        "table-9"
+      ],
+      "retrieved_ids": [
+        "ObjectType:ServerType",
+        "table-9",
+        "sec-9"
+      ],
+      "latency_ms": 5.714,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 0,
+      "hit_at_1": 0,
+      "hit_at_3": 1,
+      "recall_at_1": 0,
+      "recall_at_3": 1,
+      "mrr": 0.5
+    },
+    {
+      "question": "Section 6.3.1 ServerType",
+      "category": "positive",
+      "expected_ids": [
+        "sec-6.3.1",
+        "ObjectType:ServerType"
+      ],
+      "retrieved_ids": [
+        "ObjectType:ServerType",
+        "sec-6.3.1",
+        "sec-4.1"
+      ],
+      "latency_ms": 4.575,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 0,
+      "hit_at_1": 1,
+      "hit_at_3": 1,
+      "recall_at_1": 0.5,
+      "recall_at_3": 1,
+      "mrr": 1
+    },
+    {
+      "question": "What is ServerStatusDataType?",
+      "category": "positive",
+      "expected_ids": [
+        "DataType:ServerStatusDataType"
+      ],
+      "retrieved_ids": [
+        "DataType:ServerStatusDataType",
+        "table-243",
+        "sec-12.10"
+      ],
+      "latency_ms": 6.165,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 0,
+      "hit_at_1": 1,
+      "hit_at_3": 1,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "mrr": 1
+    },
+    {
+      "question": "What does ServerType define in its relationships?",
+      "category": "positive",
+      "expected_ids": [
+        "table-9",
+        "sec-6.3.1",
+        "ObjectType:ServerType"
+      ],
+      "retrieved_ids": [
+        "ObjectType:ServerType",
+        "sec-6.3.1",
+        "table-9"
+      ],
+      "latency_ms": 21.198,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 1,
+      "hit_at_1": 1,
+      "hit_at_3": 1,
+      "recall_at_1": 0.3333333333333333,
+      "recall_at_3": 1,
+      "mrr": 1
+    },
+    {
+      "question": "ServerType 包含哪些组件？",
+      "category": "positive",
+      "expected_ids": [
+        "ObjectType:ServerType"
+      ],
+      "retrieved_ids": [
+        "ObjectType:ServerType",
+        "sec-4.1",
+        "table-119"
+      ],
+      "latency_ms": 3.1,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 0,
+      "hit_at_1": 1,
+      "hit_at_3": 1,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "mrr": 1
+    },
+    {
+      "question": "ServerStatusDataType 的字段有哪些？",
+      "category": "positive",
+      "expected_ids": [
+        "DataType:ServerStatusDataType",
+        "table-242"
+      ],
+      "retrieved_ids": [
+        "DataType:ServerStatusDataType",
+        "table-243",
+        "sec-12.10"
+      ],
+      "latency_ms": 2.381,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 0,
+      "hit_at_1": 1,
+      "hit_at_3": 1,
+      "recall_at_1": 0.5,
+      "recall_at_3": 0.5,
+      "mrr": 1
+    },
+    {
+      "question": "Table 242 ServerStatusDataType structure",
+      "category": "positive",
+      "expected_ids": [
+        "table-242"
+      ],
+      "retrieved_ids": [
+        "DataType:ServerStatusDataType",
+        "DataType:Structure",
+        "table-242"
+      ],
+      "latency_ms": 5.039,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 0,
+      "hit_at_1": 0,
+      "hit_at_3": 1,
+      "recall_at_1": 0,
+      "recall_at_3": 1,
+      "mrr": 0.3333333333333333
+    },
+    {
+      "question": "AuditSecurityEventType definition",
+      "category": "positive",
+      "expected_ids": [
+        "EventType:AuditSecurityEventType"
+      ],
+      "retrieved_ids": [
+        "EventType:AuditSecurityEventType",
+        "sec-6.4.4",
+        "table-27"
+      ],
+      "latency_ms": 3.88,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 0,
+      "hit_at_1": 1,
+      "hit_at_3": 1,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "mrr": 1
+    },
+    {
+      "question": "BuildInfo 数据类型包含哪些字段？",
+      "category": "positive",
+      "expected_ids": [
+        "DataType:BuildInfo"
+      ],
+      "retrieved_ids": [
+        "DataType:BuildInfo",
+        "sec-12.4",
+        "table-231"
+      ],
+      "latency_ms": 2.154,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 0,
+      "hit_at_1": 1,
+      "hit_at_3": 1,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "mrr": 1
+    },
+    {
+      "question": "What is the scope of Part 5?",
+      "category": "positive",
+      "expected_ids": [
+        "sec-1"
+      ],
+      "retrieved_ids": [
+        "sec-5",
+        "sec-1",
+        "sec-2"
+      ],
+      "latency_ms": 11.081,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 0,
+      "hit_at_1": 0,
+      "hit_at_3": 1,
+      "recall_at_1": 0,
+      "recall_at_3": 1,
+      "mrr": 0.5
+    },
+    {
+      "question": "Which DataType contains productName and softwareVersion?",
+      "category": "positive",
+      "expected_ids": [
+        "DataType:BuildInfo"
+      ],
+      "retrieved_ids": [
+        "table-230",
+        "sec-12.4",
+        "DataType:BuildInfo"
+      ],
+      "latency_ms": 8.298,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 0,
+      "hit_at_1": 0,
+      "hit_at_3": 1,
+      "recall_at_1": 0,
+      "recall_at_3": 1,
+      "mrr": 0.3333333333333333
+    },
+    {
+      "question": "What structure carries the server's currentTime and shutdownReason?",
+      "category": "positive",
+      "expected_ids": [
+        "DataType:ServerStatusDataType"
+      ],
+      "retrieved_ids": [
+        "DataType:Structure",
+        "Object:Server Object",
+        "table-242"
+      ],
+      "latency_ms": 12.421,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 0,
+      "hit_at_1": 0,
+      "hit_at_3": 0,
+      "recall_at_1": 0,
+      "recall_at_3": 0,
+      "mrr": 0
+    },
+    {
+      "question": "ServerType 与 Table 9 的定义",
+      "category": "positive",
+      "expected_ids": [
+        "ObjectType:ServerType",
+        "table-9"
+      ],
+      "retrieved_ids": [
+        "ObjectType:ServerType",
+        "table-9",
+        "sec-9"
+      ],
+      "latency_ms": 5.368,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 0,
+      "hit_at_1": 1,
+      "hit_at_3": 1,
+      "recall_at_1": 0.5,
+      "recall_at_3": 1,
+      "mrr": 1
+    },
+    {
+      "question": "Section 12.10 ServerStatusDataType",
+      "category": "positive",
+      "expected_ids": [
+        "sec-12.10",
+        "DataType:ServerStatusDataType"
+      ],
+      "retrieved_ids": [
+        "DataType:ServerStatusDataType",
+        "sec-12.10",
+        "table-243"
+      ],
+      "latency_ms": 4.431,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 0,
+      "hit_at_1": 1,
+      "hit_at_3": 1,
+      "recall_at_1": 0.5,
+      "recall_at_3": 1,
+      "mrr": 1
+    },
+    {
+      "question": "服务器状态数据类型包含哪些字段？",
+      "category": "positive",
+      "expected_ids": [
+        "DataType:ServerStatusDataType"
+      ],
+      "retrieved_ids": [],
+      "latency_ms": 1.414,
+      "requested_mode": "fts",
+      "actual_mode": "fts",
+      "top_k": 3,
+      "relationship_depth": 0,
+      "hit_at_1": 0,
+      "hit_at_3": 0,
+      "recall_at_1": 0,
+      "recall_at_3": 0,
+      "mrr": 0
+    }
+  ],
+  "diagnostics": {
+    "out_of_scope": {
+      "queries": 2,
+      "retrieved_nonempty": 2,
+      "results": [
+        {
+          "question": "What is the weather in Shanghai today?",
+          "category": "out_of_scope",
+          "expected_ids": [],
+          "retrieved_ids": [
+            "ObjectType:ServerRedundancyType",
+            "table-16",
+            "table-37"
+          ],
+          "latency_ms": 14.6,
+          "requested_mode": "fts",
+          "actual_mode": "fts",
+          "top_k": 3,
+          "relationship_depth": 0,
+          "retrieved_nonempty": true
+        },
+        {
+          "question": "Who won the 2022 FIFA World Cup?",
+          "category": "out_of_scope",
+          "expected_ids": [],
+          "retrieved_ids": [
+            "sec-7.16",
+            "table-13",
+            "sec-6.3.5"
+          ],
+          "latency_ms": 12.772,
+          "requested_mode": "fts",
+          "actual_mode": "fts",
+          "top_k": 3,
+          "relationship_depth": 0,
+          "retrieved_nonempty": true
+        }
+      ]
+    },
+    "context_dependent": {
+      "queries": 2,
+      "retrieved_nonempty": 2,
+      "results": [
+        {
+          "question": "What is its data type?",
+          "category": "context_dependent",
+          "expected_ids": [],
+          "retrieved_ids": [
+            "ObjectType:ServerRedundancyType",
+            "table-16",
+            "EventType:AuditCreateSessionEventType"
+          ],
+          "latency_ms": 7.656,
+          "requested_mode": "fts",
+          "actual_mode": "fts",
+          "top_k": 3,
+          "relationship_depth": 0,
+          "retrieved_nonempty": true
+        },
+        {
+          "question": "How does that compare to the previous version?",
+          "category": "context_dependent",
+          "expected_ids": [],
+          "retrieved_ids": [
+            "sec-6.3.13",
+            "table-22",
+            "sec-Annex-D"
+          ],
+          "latency_ms": 15.624,
+          "requested_mode": "fts",
+          "actual_mode": "fts",
+          "top_k": 3,
+          "relationship_depth": 0,
+          "retrieved_nonempty": true
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "fixture": {
+      "path": "D:\\Users\\admin\\My Document\\OPCUA10000-5\\tests\\fixtures\\part5_retrieval_eval.json",
+      "sha256": "f1bdecae118e20809ab709583774caba0d4cee4307566fc6f423bcb7f5999d46",
+      "case_count": 21,
+      "case_categories": {
+        "positive": 17,
+        "out_of_scope": 2,
+        "context_dependent": 2
+      }
+    },
+    "source": {
+      "manifest": "source\\source_manifest.json",
+      "available": true,
+      "doc": "OPC-10000-5",
+      "version": "1.05.06",
+      "sha256": "c8eca3199423cbe5746e6e0aa4782fb990494474668cc9f6b9000cb142aa42bf"
+    },
+    "retrieval": {
+      "requested_mode": "fts",
+      "embedding_model": null,
+      "vector_index": null,
+      "parameters": {
+        "top_k": 3,
+        "relationship_depth_default": 0
+      }
+    },
+    "metrics": {
+      "hit_at_1": "any expected id in the first retrieved record",
+      "hit_at_3": "any expected id in the first three retrieved records",
+      "recall_at_1": "unique expected ids matched in first 1 / unique expected ids",
+      "recall_at_3": "unique expected ids matched in first 3 / unique expected ids",
+      "mrr": "reciprocal rank of the first matched expected id",
+      "latency_ms": "mean retrieval latency over positive cases",
+      "aggregates": "positive cases only; out_of_scope and context_dependent diagnostics are excluded"
+    }
+  }
+}

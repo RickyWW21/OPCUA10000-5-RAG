@@ -120,6 +120,107 @@ class KnowledgeBaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"entities\.jsonl.*line 1"):
             KnowledgeBase(self.root).get_entity("ServerType")
 
+    def test_evidence_hydrates_full_entity_table_chapter_and_chunk_text(self) -> None:
+        write_jsonl(
+            self.root / "kb" / "entities.jsonl",
+            [
+                {
+                    "id": "ObjectType:ServerType",
+                    "name": "ServerType",
+                    "kind": "ObjectType",
+                    "section": "6.3.1",
+                    "supertype": "BaseObjectType",
+                    "attributes": {"IsAbstract": "False"},
+                    "components": [
+                        {
+                            "browse_name": "ServerArray",
+                            "data_type": "String[]",
+                            "node_class": "Variable",
+                            "reference_type": "HasProperty",
+                            "type_definition": "PropertyType",
+                            "modelling_rule": "Mandatory",
+                        }
+                    ],
+                    "fields": [],
+                    "enum_values": [],
+                    "related_tables": ["table-9"],
+                    "summary_en": "ServerType defines the capabilities of an OPC UA Server.",
+                }
+            ],
+        )
+        write_jsonl(
+            self.root / "kb" / "tables.jsonl",
+            [
+                {
+                    "id": "table-9",
+                    "number": "9",
+                    "caption": "ServerType definition",
+                    "section": "6.3.1",
+                    "raw_lines": [
+                        "Attribute,Value",
+                        "BrowseName,ServerType",
+                        "HasProperty,Variable,ServerArray,String[]",
+                        "HasComponent,Method,RequestServerStateChange,Defined in 9.4,Optional",
+                    ],
+                }
+            ],
+        )
+        write_jsonl(
+            self.root / "kb" / "chapters.jsonl",
+            [
+                {
+                    "id": "sec-6.3.1",
+                    "section": "6.3.1",
+                    "title": "ServerType",
+                    "text": "6.3.1 ServerType\n\nComplete chapter text beyond any search snippet.",
+                }
+            ],
+        )
+        write_jsonl(
+            self.root / "kb" / "chunks.jsonl",
+            [
+                {
+                    "id": "chunk-sec-6.3.1-001",
+                    "type": "chunk",
+                    "section": "6.3.1",
+                    "text": "Original chunk text that is not the FTS highlighted snippet.",
+                }
+            ],
+        )
+        kb = KnowledgeBase(self.root)
+
+        entity_evidence = kb.evidence("ObjectType:ServerType", "entity")
+        self.assertIn("ServerType defines the capabilities", entity_evidence)
+        self.assertIn("Table 9", entity_evidence)
+        self.assertIn("Attribute,Value", entity_evidence)
+        self.assertIn("RequestServerStateChange", entity_evidence)
+        self.assertEqual(
+            "\n".join(
+                [
+                    "Attribute,Value",
+                    "BrowseName,ServerType",
+                    "HasProperty,Variable,ServerArray,String[]",
+                    "HasComponent,Method,RequestServerStateChange,Defined in 9.4,Optional",
+                ]
+            ),
+            kb.evidence("table-9", "table"),
+        )
+        self.assertEqual(
+            "6.3.1 ServerType\n\nComplete chapter text beyond any search snippet.",
+            kb.evidence("sec-6.3.1", "chapter"),
+        )
+        self.assertEqual(
+            "Original chunk text that is not the FTS highlighted snippet.",
+            kb.evidence("chunk-sec-6.3.1-001", "chunk"),
+        )
+        self.assertIsNone(kb.evidence("missing-id", "entity"))
+
+    def test_entity_evidence_falls_back_to_its_original_chapter(self) -> None:
+        evidence = self.kb.evidence("ObjectType:ServerType", "entity")
+
+        self.assertIn("server", evidence)
+        self.assertIn("Server chapter", evidence)
+
     def test_fts_operational_error_falls_back_to_literal_query(self) -> None:
         index = self.root / "indexes" / "fts.sqlite"
         index.unlink()
