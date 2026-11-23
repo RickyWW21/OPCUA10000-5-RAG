@@ -30,6 +30,27 @@ def expand_query(query: str) -> str:
     return " ".join([*terms, query])
 
 
+def load_source_manifest(root: str | Path) -> dict[str, Any]:
+    """Read and validate ``source/source_manifest.json`` under ``root``."""
+
+    manifest_path = Path(root) / "source" / "source_manifest.json"
+    try:
+        contents = manifest_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"Invalid source manifest JSON: {manifest_path}") from exc
+    except OSError as exc:
+        raise OSError(f"Unable to read source manifest: {manifest_path}") from exc
+    try:
+        manifest = json.loads(contents)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid source manifest JSON: {manifest_path}") from exc
+    if not isinstance(manifest, dict):
+        raise ValueError(f"Invalid source manifest JSON object: {manifest_path}")
+    return manifest
+
+
 class KnowledgeBase:
     """Read-only facade over the generated JSONL records and SQLite FTS index."""
 
@@ -110,10 +131,40 @@ class KnowledgeBase:
 
         return self._load_chapters().get(section)
 
+    def chapters(self) -> list[dict[str, Any]]:
+        """Return all cached chapter records in artifact order."""
+
+        return list(self._load_chapters().values())
+
+    def chapter_by_id(self, chapter_id: str) -> dict[str, Any] | None:
+        """Return one chapter by its canonical record ID such as ``sec-6.3.1``."""
+
+        return self._load_chapters_by_id().get(chapter_id)
+
     def table(self, number: int | str) -> dict[str, Any] | None:
         """Return one table by numeric or annex-style identifier such as ``C.1``."""
 
         return self._load_tables().get(str(number).lower())
+
+    def tables(self) -> list[dict[str, Any]]:
+        """Return all cached table records in artifact order."""
+
+        return list(self._load_tables().values())
+
+    def table_by_id(self, table_id: str) -> dict[str, Any] | None:
+        """Return one table by its canonical record ID such as ``table-9``."""
+
+        return self._load_tables_by_id().get(table_id)
+
+    def chunks(self) -> dict[str, dict[str, Any]]:
+        """Return cached chunk records keyed by canonical chunk ID."""
+
+        return dict(self._load_chunks())
+
+    def all_relationships(self) -> list[dict[str, Any]]:
+        """Return all cached relationship records in artifact order."""
+
+        return list(self._load_relationships())
 
     def evidence(self, record_id: str, record_type: str) -> str | None:
         """Return the complete original evidence text for a search result.

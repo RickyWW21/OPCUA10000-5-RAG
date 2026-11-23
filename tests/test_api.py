@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import sqlite3
 from tempfile import TemporaryDirectory
 import unittest
 
 from opcua_kb import KnowledgeBase
+from opcua_kb.api import load_source_manifest
 from tests.helpers import write_jsonl, write_knowledge_base
 
 
@@ -297,3 +299,93 @@ class KnowledgeBaseTests(unittest.TestCase):
             conn.close()
 
         self.assertEqual("DataType:BuildInfo", self.kb.search("build", top_k=1)[0]["id"])
+
+    def test_load_source_manifest_reads_valid_manifest(self) -> None:
+        source_dir = self.root / "source"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        expected = {
+            "doc": "OPC-10000-5",
+            "version": "1.05.06",
+            "sha256": "c8eca3199423cbe5746e6e0aa4782fb990494474668cc9f6b9000cb142aa42bf",
+        }
+        (source_dir / "source_manifest.json").write_text(
+            json.dumps(expected), encoding="utf-8"
+        )
+
+        manifest = load_source_manifest(self.root)
+
+        self.assertEqual(expected, manifest)
+        self.assertEqual("OPC-10000-5", manifest["doc"])
+        self.assertEqual("1.05.06", manifest["version"])
+        self.assertEqual(expected["sha256"], manifest["sha256"])
+
+    def test_load_source_manifest_raises_on_missing_file(self) -> None:
+        with self.assertRaises(FileNotFoundError):
+            load_source_manifest(self.root)
+
+        source_dir = self.root / "source"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        manifest_path = source_dir / "source_manifest.json"
+        for raw_text in ('["not", "a", "dict"]', "{not valid json"):
+            with self.subTest(raw_text=raw_text):
+                manifest_path.write_text(raw_text, encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    load_source_manifest(self.root)
+
+    def test_public_read_helpers_expose_kb_artifacts(self) -> None:
+        write_jsonl(
+            self.root / "kb" / "chapters.jsonl",
+            [
+                {
+                    "id": "sec-6.3.1",
+                    "section": "6.3.1",
+                    "title": "ServerType",
+                    "text": "ServerType section text.",
+                }
+            ],
+        )
+        write_jsonl(
+            self.root / "kb" / "tables.jsonl",
+            [
+                {
+                    "id": "table-9",
+                    "number": "9",
+                    "caption": "ServerType definition",
+                    "section": "6.3.1",
+                    "raw_lines": ["Attribute,Value", "BrowseName,ServerType"],
+                }
+            ],
+        )
+        write_jsonl(
+            self.root / "kb" / "chunks.jsonl",
+            [
+                {
+                    "id": "chunk-sec-6.3.1-001",
+                    "type": "chunk",
+                    "section": "6.3.1",
+                    "text": "Original chunk text.",
+                }
+            ],
+        )
+        kb = KnowledgeBase(self.root)
+
+        chapters = kb.chapters()
+        self.assertEqual(1, len(chapters))
+        self.assertEqual("sec-6.3.1", chapters[0]["id"])
+        self.assertEqual("6.3.1", kb.chapter_by_id("sec-6.3.1")["section"])
+        self.assertIsNone(kb.chapter_by_id("sec-missing"))
+
+        tables = kb.tables()
+        self.assertEqual(1, len(tables))
+        self.assertEqual("table-9", tables[0]["id"])
+        self.assertEqual("9", kb.table_by_id("table-9")["number"])
+        self.assertIsNone(kb.table_by_id("table-missing"))
+
+        chunks = kb.chunks()
+        self.assertEqual(["chunk-sec-6.3.1-001"], list(chunks))
+        self.assertEqual("Original chunk text.", chunks["chunk-sec-6.3.1-001"]["text"])
+
+        all_relationships = kb.all_relationships()
+        self.assertEqual(2, len(all_relationships))
+        filtered = kb.relationships("server", relation="HAS_COMPONENT", depth=1)
+        self.assertEqual(["HAS_COMPONENT"], [edge["relation"] for edge in filtered])
