@@ -65,12 +65,12 @@ def create_app(root: str | Path | None = None) -> FastAPI:
     @app.post("/api/v1/rag/query")
     def query(request: QueryRequest, http_request: Request, response: Response) -> dict[str, object]:
         session_id = _ensure_session(app, http_request, response)
+        result = _execute_query(app, request)
         conversation_id = request.conversation_id
         if conversation_id is None:
             conversation_id = app.state.sessions.create_conversation(
                 session_id, _conversation_title(request.question)
             )["id"]
-        result = _execute_query(app, request)
         _persist_exchange(app, session_id, conversation_id, request, result)
         result["conversation_id"] = conversation_id
         return result

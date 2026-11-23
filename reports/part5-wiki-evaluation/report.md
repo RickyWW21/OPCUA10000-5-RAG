@@ -138,7 +138,16 @@ C2 是 Wiki 关联链接带出的真实规范段落，provenance 保留 wiki/ent
 
 HTTP 内容核对通过既有 FastAPI TestClient 执行，没有新增浏览器点击验收，不能称为前端端到端验证。来源检查证明目标与内容正确，不能证明每个附加句子都由引用支持。
 
-> **归档复核说明（FTS5 精简后）：** `tools/evaluate_wiki_rag.py` 与 `tools/check_wiki_evaluation.py` 已在 `7883c5f` 中下线；如需离线复核本报告，请通过 `git worktree add .worktrees/wiki-eval-4bc314d 4bc314d` 检出基线快照 `4bc314d` 后再执行下方命令。
+> **归档复核说明（FTS5 精简后）：** `tools/evaluate_wiki_rag.py` 与 `tools/check_wiki_evaluation.py` 已在 `7883c5f` 中下线。Windows 下 `core.autocrlf=true` 会改变换行符导致 SHA-256 校验失败；如需离线复核本报告，请先执行：
+> ```powershell
+> git -c core.autocrlf=false worktree add .worktrees/wiki-eval-4bc314d 4bc314d
+> python -c "from pathlib import Path; p = Path('tests/fixtures/part5_wiki_comparison.json'); p.write_bytes(p.read_bytes().replace(b'\r\n', b'\n'))"
+> cd .worktrees/wiki-eval-4bc314d
+> python -c "from pathlib import Path
+> for rel in ('opcua_kb/__init__.py', 'opcua_kb/api.py', 'opcua_kb/llm.py', 'opcua_kb/retrieval.py', 'reports/part5-wiki-evaluation/run-array-coverage-final.jsonl'):
+>     p = Path(rel); p.write_bytes(p.read_bytes().replace(b'\r\n', b'\n').replace(b'\n', b'\r\n'))"
+> ```
+> 再执行下方命令。
 
 最终在线命令已完成：
 

@@ -237,6 +237,9 @@ class HttpApiTests(unittest.TestCase):
             )
             self.assertEqual(503, rag_response.status_code)
             self.assertIn("source_manifest.json", rag_response.json()["detail"])
+            conversations_after = client.get("/api/v1/conversations")
+            self.assertEqual(200, conversations_after.status_code)
+            self.assertEqual([], conversations_after.json()["conversations"])
 
     def test_online_query_exposes_missing_model_configuration(self) -> None:
         with patch.dict(

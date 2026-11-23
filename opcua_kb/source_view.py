@@ -512,8 +512,11 @@ class SourceView:
             lines = resolved.read_text(encoding="utf-8").splitlines()
         except (OSError, UnicodeDecodeError, ValueError):
             return None
+        sha256 = data.get("sha256")
+        sha256 = sha256.strip() if isinstance(sha256, str) else ""
         return {
             "version": version,
+            "sha256": sha256,
             "title": title or filename,
             "path": resolved.relative_to(self.root).as_posix(),
             "lines": lines,
@@ -602,11 +605,13 @@ class SourceView:
 
         spec_path = ""
         manifest_version = ""
+        manifest_sha256 = ""
         total_lines = 0
         manifest = self._manifest()
         if isinstance(manifest, dict):
             spec_path = str(manifest.get("path") or "")
             manifest_version = str(manifest.get("version") or "")
+            manifest_sha256 = str(manifest.get("sha256") or "")
             lines = manifest.get("lines")
             if isinstance(lines, list):
                 total_lines = len(lines)
@@ -614,13 +619,31 @@ class SourceView:
         version = ""
         for candidate in (
             source.get("version"),
+            provenance.get("source_version"),
             provenance.get("version"),
             fallback.get("version") if isinstance(fallback, dict) else None,
-            manifest_version,
         ):
             if isinstance(candidate, str) and candidate.strip():
                 version = candidate.strip()
                 break
+
+        legacy_sha256 = ""
+        for candidate in (
+            source.get("source_sha256"),
+            source.get("sha256"),
+            provenance.get("source_sha256"),
+            provenance.get("sha256"),
+            fallback.get("source_sha256") if isinstance(fallback, dict) else None,
+        ):
+            if isinstance(candidate, str) and candidate.strip():
+                legacy_sha256 = candidate.strip()
+                break
+
+        has_version = bool(version)
+        has_sha = bool(legacy_sha256)
+        version_ok = (not has_version) or (bool(manifest_version) and version == manifest_version)
+        sha_ok = (not has_sha) or (bool(manifest_sha256) and legacy_sha256.lower() == manifest_sha256.lower())
+        source_matches = (has_version or has_sha) and version_ok and sha_ok
 
         raw_locations: list[Any] = []
         if isinstance(source.get("locations"), list):
@@ -632,7 +655,7 @@ class SourceView:
 
         locations: list[dict[str, Any]] = []
         seen: set[tuple[str | None, str | None, int, int]] = set()
-        if total_lines > 0 and spec_path:
+        if source_matches and total_lines > 0 and spec_path:
             for entry in raw_locations:
                 if not isinstance(entry, dict):
                     continue

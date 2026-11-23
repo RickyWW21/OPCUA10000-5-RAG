@@ -426,8 +426,44 @@ class SourceViewTests(unittest.TestCase):
         w_only_source = self.sv.source_for_citation(legacy_w_only_citation)
         self.assertIsNotNone(w_only_source)
         self.assertEqual("legacy_wiki", w_only_source["kind"])
+        self.assertEqual("", w_only_source["version"])
         self.assertEqual([], w_only_source["locations"])
         self.assertNotIn("spec_path", w_only_source)
+
+        mismatched_version_citation = {
+            "label": "[W3]",
+            "title": "Old ServerType",
+            "id": "wiki:servertype",
+            "provenance": {
+                "path": "wiki/entities/servertype.md",
+                "source_version": "1.05.05",
+                "sources": [{"section": "6.3.1", "lines": "5-12"}],
+            },
+        }
+        mismatched_source = self.sv.source_for_citation(mismatched_version_citation)
+        self.assertIsNotNone(mismatched_source)
+        self.assertEqual("legacy_wiki", mismatched_source["kind"])
+        self.assertEqual("1.05.05", mismatched_source["version"])
+        self.assertEqual([], mismatched_source["locations"])
+        self.assertNotIn("spec_path", mismatched_source)
+
+        mismatched_sha_citation = {
+            "label": "[W4]",
+            "title": "Stale Hash ServerType",
+            "id": "wiki:servertype",
+            "source": {
+                "kind": "wiki",
+                "path": "wiki/entities/servertype.md",
+                "version": "1.05.06",
+                "source_sha256": "0" * 64,
+                "locations": [{"section": "6.3.1", "start_line": 5, "end_line": 12}],
+            },
+        }
+        mismatched_sha = self.sv.source_for_citation(mismatched_sha_citation)
+        self.assertIsNotNone(mismatched_sha)
+        self.assertEqual("legacy_wiki", mismatched_sha["kind"])
+        self.assertEqual([], mismatched_sha["locations"])
+        self.assertNotIn("spec_path", mismatched_sha)
 
         result = {
             "answer": "ServerType [E1] [W1] [W2]",

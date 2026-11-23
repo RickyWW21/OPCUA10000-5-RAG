@@ -631,7 +631,7 @@ function SourceMeta({
         </div>
       ) : (
         <span className="source-unavailable">
-          {source.kind === 'legacy_wiki' ? '历史 Wiki 页面已停用（无绑定规范行号）' : '行号不可用'}
+          {source.kind === 'legacy_wiki' ? '历史 Wiki 原文不可用（当前规范版本不匹配或无绑定规范行号）' : '行号不可用'}
         </span>
       )}
     </div>
