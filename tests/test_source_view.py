@@ -1,18 +1,19 @@
-"""HTTP and security tests for normalized evidence sources and content serving."""
+"""Security and provenance tests for normalized spec-only evidence sources."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import os
-import sqlite3
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from fastapi.testclient import TestClient
-
-from opcua_kb.http_api import create_app
+from opcua_kb.api import KnowledgeBase
+from opcua_kb.rag import RAGPipeline
+from opcua_kb.retrieval import Part5Retriever
+from opcua_kb.session_store import SessionStore
+from opcua_kb.source_view import SourceView, SourceViewError
 from tests.helpers import write_jsonl
 
 
@@ -20,7 +21,7 @@ SOURCE_LINES = [f"source line {number}" for number in range(1, 31)]
 SOURCE_TEXT = "\n".join(SOURCE_LINES) + "\n"
 
 
-class SourceViewApiTests(unittest.TestCase):
+class SourceViewTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = TemporaryDirectory()
         self.root = Path(self.temp_dir.name)
@@ -153,73 +154,32 @@ class SourceViewApiTests(unittest.TestCase):
             'sources: [{"section": "6.3.1", "table": "9", "lines": "6-12"}]\n'
             "---\n"
             "# ServerType\n\n"
-            "Draft navigation text.\n\n"
-            "[§6.3.1 Table 9 L6-L12](../../source/OPC-10000-5-v1.05.06.md#L6-L12)\n\n"
-            "[ServerDiagnosticsType](serverdiagnosticstype.md)\n\n"
-            "[Unsafe](https://example.com/unsafe)\n\n"
-            "[Config](../../AGENTS.md)\n",
-            encoding="utf-8",
-        )
-        (wiki_dir / "serverdiagnosticstype.md").write_text(
-            "---\n"
-            "page_id: serverdiagnosticstype\n"
-            "kind: entity\n"
-            "source_doc: OPC-10000-5\n"
-            "source_version: 1.05.06\n"
-            f"source_sha256: {self.sha256}\n"
-            "status: draft\n"
-            "sources: [{\"section\": \"8.3.2\", \"lines\": \"21-25\"}]\n"
-            "---\n"
-            "# ServerDiagnosticsType\n\n"
-            "Another draft page.\n",
+            "Draft navigation text.\n",
             encoding="utf-8",
         )
         (self.root / "AGENTS.md").write_text("not a knowledge page", encoding="utf-8")
 
-        self.app = create_app(self.root)
-        self.client = TestClient(self.app)
+        self.kb = KnowledgeBase(self.root)
+        self.sv = SourceView(self.root, self.kb)
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
     # ------------------------------------------------------------------
-    # Content endpoint
+    # Content serving
     # ------------------------------------------------------------------
-    def test_content_returns_full_wiki_with_allowlisted_links(self) -> None:
-        response = self.client.get(
-            "/api/v1/content", params={"path": "wiki/entities/servertype.md"}
-        )
-
-        self.assertEqual(200, response.status_code)
-        body = response.json()
-        self.assertEqual("wiki", body["kind"])
-        self.assertEqual("wiki/entities/servertype.md", body["path"])
-        self.assertEqual("ServerType", body["title"])
-        self.assertEqual("1.05.06", body["version"])
-        self.assertEqual("draft", body["status"])
-        self.assertIn("# ServerType", body["content"])
-        self.assertEqual(
-            [{"section": "6.3.1", "table": "9", "start_line": 6, "end_line": 12}],
-            body["locations"],
-        )
-        links = {(link["path"], link.get("start_line"), link.get("end_line")): link for link in body["links"]}
-        self.assertIn(("wiki/entities/serverdiagnosticstype.md", None, None), links)
-        self.assertIn(("source/OPC-10000-5-v1.05.06.md", 6, 12), links)
-        self.assertFalse(any("AGENTS" in link["path"] for link in body["links"]))
-        self.assertFalse(any("example.com" in str(link) for link in body["links"]))
+    def test_content_rejects_wiki_path(self) -> None:
+        with self.assertRaises(SourceViewError) as ctx:
+            self.sv.content("wiki/entities/servertype.md")
+        self.assertIn(ctx.exception.status_code, (400, 404))
 
     def test_content_returns_exact_spec_range_without_truncation(self) -> None:
-        response = self.client.get(
-            "/api/v1/content",
-            params={
-                "path": "source/OPC-10000-5-v1.05.06.md",
-                "start_line": 6,
-                "end_line": 12,
-            },
+        body = self.sv.content(
+            "source/OPC-10000-5-v1.05.06.md",
+            start_line=6,
+            end_line=12,
         )
 
-        self.assertEqual(200, response.status_code)
-        body = response.json()
         self.assertEqual("spec", body["kind"])
         self.assertEqual("source/OPC-10000-5-v1.05.06.md", body["path"])
         self.assertEqual(6, body["start_line"])
@@ -229,39 +189,41 @@ class SourceViewApiTests(unittest.TestCase):
             [{"table": "9", "section": "6.3.1", "start_line": 6, "end_line": 12}],
             body["locations"],
         )
+        self.assertEqual([], body["links"])
         self.assertNotIn("source line 5", body["content"])
         self.assertNotIn("source line 13", body["content"])
 
-    def test_content_paths_are_restricted_to_manifest_and_wiki_pages(self) -> None:
+    def test_content_paths_are_restricted_to_manifest_only(self) -> None:
         attempts = (
-            "/api/v1/content?path=AGENTS.md",
-            "/api/v1/content?path=../source/source_manifest.json",
-            "/api/v1/content?path=wiki/../AGENTS.md",
-            "/api/v1/content?path=wiki/index.md",
-            "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md/../../AGENTS.md",
-            "/api/v1/content?path=C:%5CUsers%5Cadmin%5COPC-10000-5-v1.05.06.md",
+            "AGENTS.md",
+            "../source/source_manifest.json",
+            "wiki/../AGENTS.md",
+            "wiki/index.md",
+            "wiki/entities/servertype.md",
+            "source/OPC-10000-5-v1.05.06.md/../../AGENTS.md",
+            "C:\\Users\\admin\\OPC-10000-5-v1.05.06.md",
+            "",
         )
-        for url in attempts:
-            with self.subTest(url=url):
-                response = self.client.get(url)
-                self.assertEqual(404, response.status_code)
-
-        missing_path = self.client.get("/api/v1/content")
-        self.assertEqual(422, missing_path.status_code)
+        for path in attempts:
+            with self.subTest(path=path):
+                with self.assertRaises(SourceViewError) as ctx:
+                    self.sv.content(path, start_line=1, end_line=1)
+                self.assertEqual(404, ctx.exception.status_code)
 
     def test_content_rejects_invalid_ranges(self) -> None:
         path = "source/OPC-10000-5-v1.05.06.md"
         cases = (
-            {"path": path},
-            {"path": path, "start_line": 0, "end_line": 5},
-            {"path": path, "start_line": 8, "end_line": 7},
-            {"path": path, "start_line": 29, "end_line": 31},
-            {"path": path, "start_line": -1, "end_line": 5},
+            {},
+            {"start_line": 0, "end_line": 5},
+            {"start_line": 8, "end_line": 7},
+            {"start_line": 29, "end_line": 31},
+            {"start_line": -1, "end_line": 5},
         )
-        for params in cases:
-            with self.subTest(params=params):
-                response = self.client.get("/api/v1/content", params=params)
-                self.assertEqual(422, response.status_code)
+        for kwargs in cases:
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(SourceViewError) as ctx:
+                    self.sv.content(path, **kwargs)
+                self.assertEqual(422, ctx.exception.status_code)
 
     def test_symlink_escape_is_rejected(self) -> None:
         outside = self.root.parent / "outside-source.md"
@@ -272,25 +234,15 @@ class SourceViewApiTests(unittest.TestCase):
         data["local_source_path"] = "C:\\old\\escaped.md"
         manifest.write_text(json.dumps(data), encoding="utf-8")
         escaped = self.root / "source" / "escaped.md"
-        wiki_escape = self.root / "wiki" / "entities" / "escaped.md"
         try:
             os.symlink(outside, escaped)
-            os.symlink(outside, wiki_escape)
         except (OSError, NotImplementedError):
             self.skipTest("symlinks are not available on this host")
 
-        response = self.client.get(
-            "/api/v1/content",
-            params={"path": "source/escaped.md", "start_line": 1, "end_line": 1},
-        )
-        wiki_response = self.client.get(
-            "/api/v1/content", params={"path": "wiki/entities/escaped.md"}
-        )
-
-        self.assertEqual(404, response.status_code)
-        self.assertEqual(404, wiki_response.status_code)
-        self.assertNotIn("SECRET OUTSIDE", response.text)
-        self.assertNotIn("SECRET OUTSIDE", wiki_response.text)
+        with self.assertRaises(SourceViewError) as ctx:
+            self.sv.content("source/escaped.md", start_line=1, end_line=1)
+        self.assertEqual(404, ctx.exception.status_code)
+        self.assertNotIn("SECRET OUTSIDE", ctx.exception.detail)
 
     def test_manifest_symlink_outside_root_is_rejected(self) -> None:
         outside = self.root.parent / "outside-manifest.json"
@@ -303,53 +255,36 @@ class SourceViewApiTests(unittest.TestCase):
         except (OSError, NotImplementedError):
             self.skipTest("symlinks are not available on this host")
 
-        response = self.client.get(
-            "/api/v1/content",
-            params={
-                "path": "source/OPC-10000-5-v1.05.06.md",
-                "start_line": 1,
-                "end_line": 1,
-            },
-        )
-
-        self.assertEqual(404, response.status_code)
+        with self.assertRaises(SourceViewError) as ctx:
+            self.sv.content(
+                "source/OPC-10000-5-v1.05.06.md",
+                start_line=1,
+                end_line=1,
+            )
+        self.assertEqual(404, ctx.exception.status_code)
 
     # ------------------------------------------------------------------
-    # Result enrichment
+    # Result enrichment & legacy SQLite safety
     # ------------------------------------------------------------------
     def test_query_enriches_citations_and_retrieved_with_normalized_sources(self) -> None:
-        response = self.client.post(
-            "/api/v1/rag/query",
-            json={
-                "question": "ServerType",
-                "retrieval_mode": "fts",
-                "top_k": 6,
-                "online": False,
-            },
+        answer = RAGPipeline(retriever=Part5Retriever(self.kb)).ask("ServerType", top_k=6)
+        body = self.sv.enrich_result(
+            {
+                "answer": answer.answer,
+                "mode": answer.mode,
+                "citations": answer.citations,
+                "retrieved": answer.retrieved,
+            }
         )
 
-        self.assertEqual(200, response.status_code)
-        body = response.json()
         self.assertTrue(body["citations"])
         self.assertTrue(body["retrieved"])
         for citation in body["citations"]:
             self.assertIn("source", citation)
+            self.assertEqual("spec", citation["source"]["kind"])
         for record in body["retrieved"]:
             self.assertIn("source", record)
-
-        wiki_citation = next(
-            citation for citation in body["citations"] if citation["id"] == "wiki:servertype"
-        )
-        wiki_source = wiki_citation["source"]
-        self.assertEqual("wiki", wiki_source["kind"])
-        self.assertEqual("wiki/entities/servertype.md", wiki_source["path"])
-        self.assertEqual("1.05.06", wiki_source["version"])
-        self.assertEqual("draft", wiki_source["status"])
-        self.assertEqual(
-            [{"section": "6.3.1", "table": "9", "start_line": 6, "end_line": 12}],
-            wiki_source["locations"],
-        )
-        self.assertTrue(wiki_source["url"].startswith("/api/v1/content?path=wiki/"))
+            self.assertEqual("spec", record["source"]["kind"])
 
         spec_citation = next(
             citation
@@ -369,49 +304,138 @@ class SourceViewApiTests(unittest.TestCase):
         self.assertIn("end_line=20", spec_source["url"])
 
     def test_legacy_history_messages_are_enriched_at_read_time(self) -> None:
-        response = self.client.post(
-            "/api/v1/rag/query",
-            json={"question": "ServerType", "retrieval_mode": "fts", "top_k": 6},
+        store = SessionStore(self.root / "data" / "rag_sessions.sqlite3")
+        session_id, _, _ = store.get_or_create_session(None)
+        conversation = store.create_conversation(session_id, "ServerType history")
+        conversation_id = conversation["id"]
+        store.append_message(session_id, conversation_id, role="user", content="ServerType")
+        store.append_message(
+            session_id,
+            conversation_id,
+            role="assistant",
+            content="ServerType [E1] [W1]",
+            mode="generated",
+            retrieval_mode="fts",
+            citations=[
+                {"label": "[E1]", "title": "ServerType", "id": "ObjectType:ServerType"},
+                {
+                    "label": "[W1]",
+                    "title": "ServerType",
+                    "id": "wiki:servertype",
+                    "source": {
+                        "kind": "wiki",
+                        "path": "wiki/entities/servertype.md",
+                        "url": "/api/v1/content?path=wiki/entities/servertype.md",
+                    },
+                },
+            ],
+            retrieved=[
+                {
+                    "label": "[E1]",
+                    "id": "ObjectType:ServerType",
+                    "type": "entity",
+                    "title": "ServerType",
+                },
+                {
+                    "label": "[W1]",
+                    "id": "wiki:servertype",
+                    "type": "wiki",
+                    "title": "ServerType",
+                    "source": {
+                        "kind": "wiki",
+                        "path": "wiki/entities/servertype.md",
+                    },
+                },
+            ],
         )
-        conversation_id = response.json()["conversation_id"]
-        database = self.app.state.sessions.path
-        conn = sqlite3.connect(database)
-        try:
-            rows = conn.execute(
-                """
-                SELECT id, citations_json, retrieved_json
-                FROM messages
-                WHERE conversation_id = ? AND role = 'assistant'
-                """,
-                (conversation_id,),
-            ).fetchall()
-            self.assertEqual(1, len(rows))
-            citations = json.loads(rows[0][1])
-            retrieved = json.loads(rows[0][2])
-            for item in citations + retrieved:
-                item.pop("source", None)
-            conn.execute(
-                "UPDATE messages SET citations_json = ?, retrieved_json = ? WHERE id = ?",
-                (json.dumps(citations), json.dumps(retrieved), rows[0][0]),
-            )
-            conn.commit()
-        finally:
-            conn.close()
 
-        loaded = self.client.get(f"/api/v1/conversations/{conversation_id}")
+        loaded = store.get_conversation(session_id, conversation_id)
+        self.assertIsNotNone(loaded)
+        message = loaded["messages"][-1]
+        self.sv.enrich_result(message)
 
-        self.assertEqual(200, loaded.status_code)
-        message = loaded.json()["messages"][-1]
-        self.assertTrue(all("source" in item for item in message["citations"]))
-        self.assertTrue(all("source" in item for item in message["retrieved"]))
-        spec = next(
-            item
-            for item in message["retrieved"]
-            if item["id"] == "ObjectType:ServerType"
+        spec_citation = next(c for c in message["citations"] if c["id"] == "ObjectType:ServerType")
+        wiki_citation = next(c for c in message["citations"] if c["label"] == "[W1]")
+        spec_retrieved = next(r for r in message["retrieved"] if r["id"] == "ObjectType:ServerType")
+        wiki_retrieved = next(r for r in message["retrieved"] if r["label"] == "[W1]")
+
+        self.assertEqual("source/OPC-10000-5-v1.05.06.md", spec_citation["source"]["path"])
+        self.assertEqual("source/OPC-10000-5-v1.05.06.md", spec_retrieved["source"]["path"])
+        self.assertEqual(5, spec_retrieved["source"]["locations"][0]["start_line"])
+        self.assertEqual(20, spec_retrieved["source"]["locations"][0]["end_line"])
+        self.assertNotIn("source", wiki_citation)
+        self.assertNotIn("source", wiki_retrieved)
+
+    def test_enrich_result_strips_legacy_wiki_source_and_handles_w_label(self) -> None:
+        legacy_wiki_citation = {
+            "label": "[W1]",
+            "title": "ServerType",
+            "id": "wiki:servertype",
+            "source": {
+                "kind": "wiki",
+                "path": "wiki/entities/servertype.md",
+                "version": "1.05.06",
+                "url": "/api/v1/content?path=wiki/entities/servertype.md",
+            },
+        }
+        legacy_w_only_citation = {
+            "label": "[W2]",
+            "title": "Legacy page without prefix",
+            "id": "servertype",
+        }
+        legacy_wiki_retrieved = {
+            "label": "[W1]",
+            "id": "servertype",
+            "title": "ServerType",
+            "source": {
+                "kind": "wiki",
+                "path": "wiki/entities/servertype.md",
+            },
+        }
+        spec_citation = {
+            "label": "[E1]",
+            "title": "ServerType",
+            "id": "ObjectType:ServerType",
+        }
+        spec_retrieved = {
+            "label": "[E1]",
+            "id": "ObjectType:ServerType",
+            "type": "entity",
+            "title": "ServerType",
+        }
+
+        self.assertIsNone(self.sv.source_for_citation(legacy_wiki_citation))
+        self.assertIsNone(self.sv.source_for_citation(legacy_w_only_citation))
+        self.assertIsNone(self.sv.source_for_retrieved(legacy_wiki_retrieved))
+
+        result = {
+            "answer": "ServerType [E1] [W1] [W2]",
+            "citations": [legacy_wiki_citation, legacy_w_only_citation, spec_citation],
+            "retrieved": [legacy_wiki_retrieved, spec_retrieved],
+        }
+
+        enriched = self.sv.enrich_result(result)
+
+        self.assertNotIn("source", enriched["citations"][0])
+        self.assertNotIn("source", enriched["citations"][1])
+        self.assertNotIn("source", enriched["retrieved"][0])
+        self.assertEqual("spec", enriched["citations"][2]["source"]["kind"])
+        self.assertEqual(
+            [{"section": "6.3.1", "start_line": 5, "end_line": 20}],
+            enriched["citations"][2]["source"]["locations"],
         )
-        self.assertEqual("source/OPC-10000-5-v1.05.06.md", spec["source"]["path"])
-        self.assertEqual(5, spec["source"]["locations"][0]["start_line"])
-        self.assertEqual(20, spec["source"]["locations"][0]["end_line"])
+        self.assertEqual("spec", enriched["retrieved"][1]["source"]["kind"])
+
+    def test_source_view_uses_no_private_kb_loaders(self) -> None:
+        source_view_path = Path(__file__).resolve().parents[1] / "opcua_kb" / "source_view.py"
+        source_text = source_view_path.read_text(encoding="utf-8")
+        for private_name in (
+            "_load_chapters",
+            "_load_tables",
+            "_load_chunks",
+            "_load_relationships",
+        ):
+            self.assertNotIn(private_name, source_text)
 
     def test_enrichment_supports_entity_table_chapter_chunk_and_relationship(self) -> None:
         result = {
@@ -462,7 +486,7 @@ class SourceViewApiTests(unittest.TestCase):
             ],
         }
 
-        self.app.state.source_view.enrich_result(result)
+        self.sv.enrich_result(result)
 
         expected = {
             "ObjectType:ServerType": ("6.3.1", None, 5, 20),
@@ -501,7 +525,8 @@ class SourceViewApiTests(unittest.TestCase):
                 },
             ],
         )
-        view = self.app.state.source_view
+        # Re-instantiate KB so cached relationships reflect the updated fixture.
+        view = SourceView(self.root, KnowledgeBase(self.root))
         base = {
             "id": "ObjectType:ServerDiagnosticsType",
             "type": "relationship",
@@ -540,7 +565,7 @@ class SourceViewApiTests(unittest.TestCase):
         self.assertEqual("", ambiguous["url"])
 
     def test_unverifiable_record_does_not_fabricate_line_numbers(self) -> None:
-        source = self.app.state.source_view.source_for_retrieved(
+        source = self.sv.source_for_retrieved(
             {"id": "ObjectType:Missing", "type": "entity", "title": "Missing"}
         )
 
@@ -555,7 +580,8 @@ class SourceViewApiTests(unittest.TestCase):
             "id": "sec-Annex-C", "section": "Annex C", "title": "Annex C",
             "start_line": 21, "end_line": 30, "text": "Annex text",
         }])
-        source = self.app.state.source_view.source_for_retrieved(
+        view = SourceView(self.root, KnowledgeBase(self.root))
+        source = view.source_for_retrieved(
             {"id": "sec-Annex-C", "type": "chapter"}
         )
         self.assertEqual([{
@@ -567,7 +593,8 @@ class SourceViewApiTests(unittest.TestCase):
             "id": "intro", "chunk_type": "section_text", "section": "6.3.1",
             "table_ids": ["table-9"], "text": "\n".join(SOURCE_LINES[4:6]),
         }])
-        source = self.app.state.source_view.source_for_retrieved(
+        view = SourceView(self.root, KnowledgeBase(self.root))
+        source = view.source_for_retrieved(
             {"id": "intro", "type": "chunk"}
         )
         self.assertEqual([{
@@ -577,7 +604,7 @@ class SourceViewApiTests(unittest.TestCase):
     def test_missing_source_metadata_is_latently_unavailable(self) -> None:
         (self.root / "source" / "source_manifest.json").unlink()
 
-        source = self.app.state.source_view.source_for_retrieved(
+        source = self.sv.source_for_retrieved(
             {"id": "ObjectType:ServerType", "type": "entity", "title": "ServerType"}
         )
 

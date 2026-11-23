@@ -1,4 +1,4 @@
-"""Path-safe evidence metadata and content serving for the Part 5 API.
+"""Path-safe spec-only evidence metadata and content serving for the Part 5 API.
 
 The helpers in this module are deliberately read-only.  They normalize the
 source information already present in RAG records and expose the exact source
@@ -7,21 +7,18 @@ range that backs a citation without ever reading an arbitrary path.
 
 from __future__ import annotations
 
-import json
-import posixpath
 import re
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, unquote, urlsplit
+from urllib.parse import quote
+
+from .api import load_source_manifest
 
 _DOC = "OPC-10000-5"
-_WIKI_PATH = re.compile(r"^wiki/(entities|topics)/[a-z0-9][a-z0-9-]*\.md$")
 _SECTION = re.compile(r"^(?:\d+(?:\.\d+)*|Annex [A-Z]|[A-Z](?:\.\d+)+)$")
 _TABLE = re.compile(r"^(?:\d+|[A-Z]\.\d+)$")
 _LINES = re.compile(r"^(\d+)-(\d+)$")
-_FRAGMENT = re.compile(r"^L(\d+)(?:-L?(\d+))?$", re.IGNORECASE)
-_MARKDOWN_LINK = re.compile(r"(?<!!)\[([^\]\n]+)\]\(([^)\n]+)\)")
-_SAFE_TARGET = re.compile(r"^[^\s]+$")
+_WIKI_LABEL = re.compile(r"^\[W\d*\]$", re.IGNORECASE)
 
 
 class SourceViewError(Exception):
@@ -34,7 +31,7 @@ class SourceViewError(Exception):
 
 
 class SourceView:
-    """Add normalized evidence sources and serve verified Wiki/spec content."""
+    """Add normalized spec evidence sources and serve verified spec content."""
 
     def __init__(self, root: str | Path, knowledge_base: Any) -> None:
         self.root = Path(root).resolve()
@@ -50,11 +47,10 @@ class SourceView:
         start_line: int | None = None,
         end_line: int | None = None,
     ) -> dict[str, Any]:
-        """Return a full Wiki page or an exact specification line range."""
+        """Return an exact specification line range."""
 
-        wiki_key = _wiki_key(path)
-        if wiki_key is not None:
-            return self._wiki_content(wiki_key)
+        if isinstance(path, str) and (path == "wiki" or path.startswith("wiki/")):
+            raise SourceViewError(404, "source path not allowed")
 
         manifest = self._manifest()
         if manifest is None:
@@ -82,107 +78,6 @@ class SourceView:
             "links": [],
         }
 
-    def _wiki_content(self, wiki_key: str) -> dict[str, Any]:
-        page_path = self._wiki_pages().get(wiki_key)
-        if page_path is None:
-            raise SourceViewError(404, "wiki page not found")
-        try:
-            text = page_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
-            raise SourceViewError(404, "wiki page not readable") from exc
-        page = _parse_wiki_page(text)
-        if page is None:
-            raise SourceViewError(422, "wiki page is not a valid content page")
-
-        body = page["body"]
-        content_lines = body.splitlines()
-        end_line = len(content_lines) if content_lines else 0
-        manifest = self._manifest()
-        source_lines = manifest["lines"] if manifest is not None else None
-        locations = (
-            self._locations_from_entries(page["sources"], source_lines)
-            if source_lines is not None
-            else []
-        )
-        links = self._wiki_links(wiki_key, body, manifest, source_lines)
-        return {
-            "kind": "wiki",
-            "path": wiki_key,
-            "title": page["title"],
-            "version": page["version"] or (manifest["version"] if manifest else "") or "unavailable",
-            "status": page["status"] or "unavailable",
-            "start_line": 1,
-            "end_line": end_line,
-            "content": body,
-            "locations": locations,
-            "links": links,
-        }
-
-    def _wiki_links(
-        self,
-        page_key: str,
-        body: str,
-        manifest: dict[str, Any] | None,
-        source_lines: list[str] | None,
-    ) -> list[dict[str, Any]]:
-        """Parse Markdown links and keep only allowlisted Wiki/spec targets."""
-
-        pages = self._wiki_pages()
-        links: list[dict[str, Any]] = []
-        seen: set[tuple[str, int | None, int | None]] = set()
-        for match in _MARKDOWN_LINK.finditer(body):
-            label = " ".join(match.group(1).split())
-            target = _link_target(match.group(2))
-            if not label or not target:
-                continue
-            if target.startswith(("http://", "https://", "mailto:", "#")):
-                continue
-            parts = urlsplit(target)
-            if parts.scheme or parts.netloc:
-                continue
-            relative = unquote(parts.path)
-            if not relative or relative.startswith("/"):
-                continue
-            normalized = posixpath.normpath(
-                posixpath.join(posixpath.dirname(page_key), relative)
-            )
-            if normalized.startswith("../") or normalized == "..":
-                continue
-            if normalized in pages:
-                marker = (normalized, None, None)
-                if marker not in seen:
-                    seen.add(marker)
-                    links.append({"label": label, "path": normalized})
-                continue
-            if manifest is None or normalized != manifest["path"]:
-                continue
-            fragment = unquote(parts.fragment)
-            fragment_match = _FRAGMENT.fullmatch(fragment)
-            if fragment_match is None:
-                continue
-            start = int(fragment_match.group(1))
-            end = int(fragment_match.group(2) or fragment_match.group(1))
-            if (
-                source_lines is None
-                or start < 1
-                or end < start
-                or end > len(source_lines)
-            ):
-                continue
-            marker = (manifest["path"], start, end)
-            if marker in seen:
-                continue
-            seen.add(marker)
-            links.append(
-                {
-                    "label": label,
-                    "path": manifest["path"],
-                    "start_line": start,
-                    "end_line": end,
-                }
-            )
-        return links
-
     # ------------------------------------------------------------------
     # Additive result enrichment
     # ------------------------------------------------------------------
@@ -194,6 +89,9 @@ class SourceView:
         if isinstance(retrieved, list):
             for item in retrieved:
                 if not isinstance(item, dict):
+                    continue
+                if _strip_legacy_wiki_source(item):
+                    sources_by_id.setdefault(str(item.get("id") or ""), None)
                     continue
                 try:
                     source = self.source_for_retrieved(item)
@@ -210,10 +108,15 @@ class SourceView:
             for citation in citations:
                 if not isinstance(citation, dict):
                     continue
+                if _strip_legacy_wiki_source(citation):
+                    continue
                 try:
-                    source = sources_by_id.get(str(citation.get("id") or ""))
-                    if source is None:
-                        source = self.source_for_citation(citation)
+                    if _is_legacy_wiki_record(citation):
+                        source = None
+                    else:
+                        source = sources_by_id.get(str(citation.get("id") or ""))
+                        if source is None:
+                            source = self.source_for_citation(citation)
                 except Exception:
                     source = None
                 if source is not None:
@@ -221,19 +124,11 @@ class SourceView:
         return result
 
     def source_for_retrieved(self, item: dict[str, Any]) -> dict[str, Any] | None:
+        if _is_legacy_wiki_record(item):
+            return None
         provenance = item.get("provenance")
         record_id = str(item.get("id") or "")
         record_type = str(item.get("type") or "") or _infer_record_type(record_id)
-        if (
-            record_type == "wiki"
-            or record_id.startswith("wiki:")
-            or _is_wiki_provenance(provenance)
-        ):
-            if isinstance(provenance, dict):
-                source = self._wiki_source(provenance)
-                if source is not None:
-                    return source
-            return self._wiki_source_for_id(record_id)
         if isinstance(provenance, dict):
             return self._spec_source(provenance)
         relationship_source = None
@@ -251,14 +146,10 @@ class SourceView:
         )
 
     def source_for_citation(self, citation: dict[str, Any]) -> dict[str, Any] | None:
+        if _is_legacy_wiki_record(citation):
+            return None
         provenance = citation.get("provenance")
         record_id = str(citation.get("id") or "")
-        if record_id.startswith("wiki:") or _is_wiki_provenance(provenance):
-            if isinstance(provenance, dict):
-                source = self._wiki_source(provenance)
-                if source is not None:
-                    return source
-            return self._wiki_source_for_id(record_id)
         if isinstance(provenance, dict):
             return self._spec_source(provenance)
         return self._record_source(
@@ -266,62 +157,6 @@ class SourceView:
             _infer_record_type(record_id),
             title=str(citation.get("title") or ""),
         )
-
-    def _wiki_source_for_id(self, record_id: str) -> dict[str, Any] | None:
-        if not record_id.startswith("wiki:"):
-            return None
-        page_id = record_id.split(":", 1)[1]
-        key = None
-        for candidate in self._wiki_pages():
-            if candidate.rsplit("/", 1)[-1].removesuffix(".md") == page_id:
-                key = candidate
-                break
-        if key is None:
-            return None
-        page_path = self._wiki_pages()[key]
-        try:
-            page = _parse_wiki_page(page_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError):
-            return None
-        if page is None:
-            return None
-        provenance = {
-            "path": key,
-            "source_version": page["version"],
-            "status": page["status"],
-            "sources": page["sources"],
-        }
-        return self._wiki_source(provenance)
-
-    def _wiki_source(self, provenance: dict[str, Any]) -> dict[str, Any] | None:
-        path = provenance.get("path")
-        key = _wiki_key(path)
-        if key is None or key not in self._wiki_pages():
-            return None
-        manifest = self._manifest()
-        source_lines = manifest["lines"] if manifest is not None else None
-        raw_sources = provenance.get("sources")
-        locations = (
-            self._locations_from_entries(
-                raw_sources if isinstance(raw_sources, list) else [], source_lines
-            )
-            if source_lines is not None
-            else []
-        )
-        version = str(provenance.get("source_version") or "")
-        if not version and manifest is not None:
-            version = manifest["version"]
-        status = provenance.get("status")
-        source: dict[str, Any] = {
-            "kind": "wiki",
-            "path": key,
-            "version": version or "unavailable",
-            "locations": locations,
-            "url": _content_url(key),
-        }
-        if isinstance(status, str) and status:
-            source["status"] = status
-        return source
 
     def _spec_source(self, provenance: dict[str, Any]) -> dict[str, Any] | None:
         manifest = self._manifest()
@@ -429,14 +264,18 @@ class SourceView:
                     text = chunk.get("text")
                     if chapter_range and source_lines is not None and isinstance(text, str) and text:
                         start, end = chapter_range
-                        original = "\n".join(source_lines[start - 1:end])
+                        original = "\n".join(source_lines[start - 1 : end])
                         offset = original.find(text)
                         if offset >= 0:
                             first_line = start + original[:offset].count("\n")
-                            location = self._validated_location({
-                                "section": chunk.get("section"), "start_line": first_line,
-                                "end_line": first_line + text.count("\n"),
-                            }, source_lines)
+                            location = self._validated_location(
+                                {
+                                    "section": chunk.get("section"),
+                                    "start_line": first_line,
+                                    "end_line": first_line + text.count("\n"),
+                                },
+                                source_lines,
+                            )
                             if location is not None:
                                 return [location]
                     return self._locations_from_range(
@@ -544,46 +383,6 @@ class SourceView:
         )
         return [location] if location is not None else []
 
-    def _locations_from_entries(
-        self, entries: Any, source_lines: list[str] | None
-    ) -> list[dict[str, Any]]:
-        if not isinstance(entries, list):
-            return []
-        locations: list[dict[str, Any]] = []
-        seen: set[tuple[Any, Any, int, int]] = set()
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            line_value = entry.get("lines")
-            if not isinstance(line_value, str):
-                continue
-            match = _LINES.fullmatch(line_value.strip())
-            if match is None:
-                continue
-            start, end = (int(part) for part in match.groups())
-            location = self._validated_location(
-                {
-                    "section": entry.get("section"),
-                    "table": entry.get("table"),
-                    "start_line": start,
-                    "end_line": end,
-                },
-                source_lines,
-            )
-            if location is None:
-                continue
-            marker = (
-                location.get("section"),
-                location.get("table"),
-                location["start_line"],
-                location["end_line"],
-            )
-            if marker in seen:
-                continue
-            seen.add(marker)
-            locations.append(location)
-        return locations
-
     def _validated_location(
         self, raw: dict[str, Any], source_lines: list[str] | None
     ) -> dict[str, Any] | None:
@@ -632,7 +431,7 @@ class SourceView:
 
         chapter = None
         chapter_size = None
-        for record in self._chapters().values():
+        for record in self._chapters():
             if not isinstance(record, dict):
                 continue
             line_range = _line_range(record)
@@ -647,7 +446,7 @@ class SourceView:
 
         table = None
         table_size = None
-        for record in self._tables().values():
+        for record in self._tables():
             if not isinstance(record, dict):
                 continue
             line_range = _line_range(record)
@@ -682,10 +481,10 @@ class SourceView:
             resolved_manifest = manifest_path.resolve()
             resolved_manifest.relative_to(source_dir)
             resolved_manifest.relative_to(self.root)
-            data = json.loads(resolved_manifest.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            data = load_source_manifest(self.root)
+        except (FileNotFoundError, ValueError, OSError):
             return None
-        if not isinstance(data, dict) or data.get("doc") != _DOC:
+        if data.get("doc") != _DOC:
             return None
         version = data.get("version")
         version = version.strip() if isinstance(version, str) else ""
@@ -716,82 +515,37 @@ class SourceView:
             "lines": lines,
         }
 
-    def _wiki_pages(self) -> dict[str, Path]:
-        pages: dict[str, Path] = {}
-        wiki_root = (self.root / "wiki").resolve()
-        for folder in ("entities", "topics"):
-            folder_path = self.root / "wiki" / folder
-            if not folder_path.is_dir():
-                continue
-            try:
-                candidates = sorted(folder_path.glob("*.md"))
-            except OSError:
-                continue
-            for candidate in candidates:
-                try:
-                    resolved = candidate.resolve()
-                    resolved.relative_to(wiki_root)
-                    resolved.relative_to(self.root)
-                except (OSError, ValueError):
-                    continue
-                if not resolved.is_file():
-                    continue
-                relative = resolved.relative_to(self.root).as_posix()
-                if _WIKI_PATH.fullmatch(relative):
-                    pages[relative] = resolved
-        return pages
-
-    def _call_kb(self, method_name: str, key: str) -> Any:
+    def _call_kb(self, method_name: str, *args: Any) -> Any:
         method = getattr(self.knowledge_base, method_name, None)
         if not callable(method):
             return None
         try:
-            return method(key)
+            return method(*args)
         except Exception:
             return None
-
-    def _artifact(self, loader_name: str, key: str) -> Any:
-        loader = getattr(self.knowledge_base, loader_name, None)
-        if not callable(loader):
-            return None
-        try:
-            records = loader()
-        except Exception:
-            return None
-        if not isinstance(records, dict):
-            return None
-        return records.get(key)
 
     def _chapter(self, section: Any) -> Any:
         if not isinstance(section, str) or not section:
             return None
-        return self._call_kb("chapter", section)
+        record = self._call_kb("chapter", section)
+        return record if isinstance(record, dict) else None
 
     def _chapter_by_id(self, record_id: str) -> Any:
-        record = self._artifact("_load_chapters_by_id", record_id)
-        if record is not None:
+        record = self._call_kb("chapter_by_id", record_id)
+        if isinstance(record, dict):
             return record
-        return self._chapters().get(record_id)
+        for chapter in self._chapters():
+            if isinstance(chapter, dict) and chapter.get("id") == record_id:
+                return chapter
+        return None
 
-    def _chapters(self) -> dict[str, Any]:
-        loader = getattr(self.knowledge_base, "_load_chapters", None)
-        if not callable(loader):
-            return {}
-        try:
-            records = loader()
-        except Exception:
-            return {}
-        return records if isinstance(records, dict) else {}
+    def _chapters(self) -> list[dict[str, Any]]:
+        records = self._call_kb("chapters")
+        return records if isinstance(records, list) else []
 
-    def _tables(self) -> dict[str, Any]:
-        loader = getattr(self.knowledge_base, "_load_tables", None)
-        if not callable(loader):
-            return {}
-        try:
-            records = loader()
-        except Exception:
-            return {}
-        return records if isinstance(records, dict) else {}
+    def _tables(self) -> list[dict[str, Any]]:
+        records = self._call_kb("tables")
+        return records if isinstance(records, list) else []
 
     def _table_by_reference(self, reference: Any) -> Any:
         if reference is None:
@@ -799,98 +553,61 @@ class SourceView:
         key = _clean_table(reference)
         if key is None:
             return None
-        by_id = self._artifact("_load_tables_by_id", f"table-{key}")
-        if by_id is not None:
+        by_id = self._call_kb("table_by_id", f"table-{key}")
+        if isinstance(by_id, dict):
             return by_id
-        by_number = self._tables().get(key.lower())
-        if by_number is not None:
+        by_number = self._call_kb("table", key)
+        if isinstance(by_number, dict):
             return by_number
-        return self._call_kb("table", key)
+        key_lower = key.lower()
+        for table in self._tables():
+            if not isinstance(table, dict):
+                continue
+            if str(table.get("id") or "") == f"table-{key}":
+                return table
+            if str(table.get("number") or "").lower() == key_lower:
+                return table
+        return None
 
     def _chunk(self, record_id: str) -> Any:
-        return self._artifact("_load_chunks", record_id)
+        records = self._call_kb("chunks")
+        if not isinstance(records, dict):
+            return None
+        record = records.get(record_id)
+        return record if isinstance(record, dict) else None
 
     def _relationships(self) -> list[Any]:
-        loader = getattr(self.knowledge_base, "_load_relationships", None)
-        if not callable(loader):
-            return []
-        try:
-            records = loader()
-        except Exception:
-            return []
+        records = self._call_kb("all_relationships")
         return records if isinstance(records, list) else []
 
 
-def _parse_wiki_page(text: str) -> dict[str, Any] | None:
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return None
-    closing = None
-    for index in range(1, len(lines)):
-        if lines[index].strip() == "---":
-            closing = index
-            break
-    if closing is None:
-        return None
+def _strip_legacy_wiki_source(record: dict[str, Any]) -> bool:
+    """Remove any persisted ``kind="wiki"`` source; return True if removed."""
 
-    data: dict[str, str] = {}
-    for line in lines[1:closing]:
-        key, separator, value = line.partition(":")
-        if not separator or not key.strip():
-            return None
-        data[key.strip()] = value.strip()
-    body = "\n".join(lines[closing + 1 :])
-    title = _h1(body)
-    if title is None:
-        return None
-    raw_sources: Any = []
-    value = data.get("sources")
-    if value:
-        try:
-            raw_sources = json.loads(value)
-        except json.JSONDecodeError:
-            raw_sources = []
-    return {
-        "title": title,
-        "body": body,
-        "version": data.get("source_version", ""),
-        "status": data.get("status", ""),
-        "sources": raw_sources if isinstance(raw_sources, list) else [],
-    }
+    source = record.get("source")
+    if isinstance(source, dict) and source.get("kind") == "wiki":
+        record.pop("source", None)
+        return True
+    return False
 
 
-def _h1(body: str) -> str | None:
-    for line in body.splitlines():
-        if line.startswith("# "):
-            title = line[2:].strip()
-            return title or None
-    return None
-
-
-def _wiki_key(value: Any) -> str | None:
-    if not isinstance(value, str):
-        return None
-    value = value.strip()
-    if not value or "\\" in value or "\x00" in value:
-        return None
-    parts = value.split("/")
-    if any(part in {"", ".", ".."} for part in parts):
-        return None
-    return value if _WIKI_PATH.fullmatch(value) else None
-
-
-def _link_target(value: str) -> str | None:
-    target = value.strip()
-    if not target:
-        return None
-    first = target.split()[0]
-    if first.startswith("<") and first.endswith(">"):
-        first = first[1:-1]
-    return first if _SAFE_TARGET.fullmatch(first) else None
-
-
-def _is_wiki_provenance(provenance: Any) -> bool:
-    return isinstance(provenance, dict) and _wiki_key(provenance.get("path")) is not None
+def _is_legacy_wiki_record(record: dict[str, Any]) -> bool:
+    record_type = str(record.get("type") or "")
+    record_id = str(record.get("id") or "")
+    label = record.get("label")
+    source = record.get("source")
+    provenance = record.get("provenance")
+    if record_type == "wiki" or record_id.startswith("wiki:"):
+        return True
+    if isinstance(label, str) and _WIKI_LABEL.fullmatch(label.strip()):
+        return True
+    if isinstance(source, dict) and source.get("kind") == "wiki":
+        return True
+    if isinstance(provenance, dict):
+        path = provenance.get("path")
+        if isinstance(path, str) and path.strip().startswith("wiki/"):
+            return True
+    return False
 
 
 def _relationship_source_id(
