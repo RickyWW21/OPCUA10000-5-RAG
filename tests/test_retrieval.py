@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from opcua_kb.retrieval import Part5Retriever
+from opcua_kb.retrieval import Part5Retriever, RetrievalError, RetrievedRecord
 
 
 class RetrievalTests(unittest.TestCase):
@@ -98,12 +98,58 @@ class RetrievalTests(unittest.TestCase):
         self.assertIsNone(records[0].evidence)
 
     def test_retrieved_record_evidence_default_keeps_positional_compatibility(self):
-        from opcua_kb.retrieval import RetrievedRecord
-
         record = RetrievedRecord("id", "chunk", "Title", "snippet")
 
         self.assertIsNone(record.evidence)
         self.assertEqual("OPC-10000-5", record.doc)
+
+    def test_retriever_is_fts_only_and_stateless(self):
+        kb = self._rooted_kb({"doc": "OPC-10000-5"})
+        wiki_dir = kb.root / "wiki" / "entities"
+        wiki_dir.mkdir(parents=True)
+        (wiki_dir / "servertype.md").write_text("# ServerType\nWiki draft\n", encoding="utf-8")
+        kb.search.return_value = [
+            {"type": "chunk", "id": "chunk-1", "title": "6.3.1", "snippet": "ServerType spec"}
+        ]
+
+        retriever = Part5Retriever(kb)
+        self.assertEqual("fts", retriever.mode)
+        self.assertFalse(hasattr(retriever, "last_mode"))
+        with self.assertRaises(AttributeError):
+            retriever.mode = "hybrid"  # type: ignore[misc]
+        with self.assertRaises(TypeError):
+            Part5Retriever(kb, vector_index=object())  # type: ignore[call-arg]
+        with self.assertRaises(TypeError):
+            Part5Retriever(kb, embedding_provider=object())  # type: ignore[call-arg]
+
+        records = retriever.retrieve("ServerType", top_k=4)
+        self.assertEqual(["chunk-1"], [record.id for record in records])
+        self.assertTrue(
+            all(
+                record.type != "wiki"
+                and not hasattr(record, "companion_sources")
+                and not record.source_records
+                for record in records
+            )
+        )
+
+    def test_retriever_manifest_guard_rejects_non_part5(self):
+        foreign = self._rooted_kb({"doc": "OPC-10000-4"})
+        with self.assertRaises(RetrievalError):
+            Part5Retriever(foreign)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Mock()
+            missing.root = Path(tmp)
+            with self.assertRaises(RetrievalError):
+                Part5Retriever(missing)
+
+            invalid = Mock()
+            invalid.root = Path(tmp)
+            (Path(tmp) / "source").mkdir()
+            (Path(tmp) / "source" / "source_manifest.json").write_text("{bad json", encoding="utf-8")
+            with self.assertRaises(RetrievalError):
+                Part5Retriever(invalid)
 
 
 if __name__ == "__main__":
