@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from .api import KnowledgeBase
 from .rag import RAGPipeline, create_chat_model_from_env, create_retriever
+from .retrieval import Part5Retriever, RetrievalError
 from .session_store import SessionStore
 from .source_view import SourceView, SourceViewError
 
@@ -35,7 +36,7 @@ def create_app(root: str | Path | None = None) -> FastAPI:
     app.state.knowledge_base = KnowledgeBase(root_path)
     app.state.root = root_path
     app.state.source_view = SourceView(root_path, app.state.knowledge_base)
-    app.state.retriever = create_retriever(app.state.knowledge_base)
+    app.state.retriever = None
     app.state.sessions = SessionStore(
         os.getenv("SESSION_DB_PATH", str(root_path / "data" / "rag_sessions.sqlite3")),
         ttl_days=int(os.getenv("SESSION_TTL_DAYS", "30")),
@@ -192,8 +193,19 @@ def _cookie_samesite() -> str:
     return value if value in {"lax", "strict", "none"} else "lax"
 
 
-def _execute_query(app: FastAPI, request: QueryRequest) -> dict[str, object]:
+def _get_retriever(app: FastAPI) -> Part5Retriever:
     retriever = app.state.retriever
+    if retriever is None:
+        try:
+            retriever = create_retriever(app.state.knowledge_base)
+        except RetrievalError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        app.state.retriever = retriever
+    return retriever
+
+
+def _execute_query(app: FastAPI, request: QueryRequest) -> dict[str, object]:
+    retriever = _get_retriever(app)
     chat_model, model_error = create_chat_model_from_env() if request.online else (None, None)
     answer = RAGPipeline(retriever=retriever, chat_model=chat_model).ask(
         request.question,

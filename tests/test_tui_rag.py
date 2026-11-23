@@ -1,5 +1,6 @@
 import asyncio
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,8 +10,10 @@ from opcua_kb.rag import RAGAnswer
 from tools import tui
 
 
-def make_root() -> Path:
+def make_root(case: unittest.TestCase | None = None) -> Path:
     root = Path(tempfile.mkdtemp())
+    if case is not None:
+        case.addCleanup(shutil.rmtree, root, ignore_errors=True)
     (root / "source").mkdir()
     (root / "source" / "source_manifest.json").write_text(
         json.dumps({"doc": "OPC-10000-5", "sha256": "abc"}), encoding="utf-8"
@@ -63,7 +66,7 @@ class TuiRagTests(unittest.TestCase):
         async def check_layout() -> None:
             for width in (80, 60):
                 with self.subTest(width=width):
-                    app = tui.KnowledgeBaseTUI(make_root())
+                    app = tui.KnowledgeBaseTUI(make_root(self))
                     async with app.run_test(size=(width, 30)) as pilot:
                         await pilot.pause()
                         options_row = app.query_one("#search-options-row")
@@ -82,7 +85,7 @@ class TuiRagTests(unittest.TestCase):
 
     def test_online_checkbox_renders_distinct_checked_state(self) -> None:
         async def check_render() -> None:
-            app = tui.KnowledgeBaseTUI(make_root())
+            app = tui.KnowledgeBaseTUI(make_root(self))
             async with app.run_test(size=(80, 30)) as pilot:
                 await pilot.pause()
                 checkbox = app.query_one("#rag-online")
@@ -95,7 +98,7 @@ class TuiRagTests(unittest.TestCase):
 
     def test_tui_search_does_not_double_query_kb(self) -> None:
         async def check_single_search() -> None:
-            app = tui.KnowledgeBaseTUI(make_root())
+            app = tui.KnowledgeBaseTUI(make_root(self))
             fake_answer = RAGAnswer(
                 answer="[E1] ServerType",
                 mode="offline",

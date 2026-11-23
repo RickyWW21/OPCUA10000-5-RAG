@@ -9,9 +9,11 @@ type SourceLocation = {
   end_line: number
 }
 type EvidenceSource = {
-  kind: 'spec'
+  kind: 'spec' | 'legacy_wiki'
   path: string
   version: string
+  status?: string
+  spec_path?: string
   locations: SourceLocation[]
   url?: string
 }
@@ -102,12 +104,12 @@ function versionLabel(version: string | null | undefined): string {
   return value.toLowerCase().startsWith('v') ? value : `v${value}`
 }
 
-function sourceKindLabel(): string {
-  return '规范原文'
+function sourceKindLabel(kind: EvidenceSource['kind']): string {
+  return kind === 'legacy_wiki' ? '历史 Wiki 草稿' : '规范原文'
 }
 
-function sourceStatusLabel(): string {
-  return 'OPC UA Part 5'
+function sourceStatusLabel(kind: EvidenceSource['kind']): string {
+  return kind === 'legacy_wiki' ? '已停用 · 非规范草稿' : 'OPC UA Part 5'
 }
 
 function locationLabel(location: SourceLocation): string {
@@ -293,12 +295,15 @@ function App() {
 
   function openSource(source: EvidenceSource, location?: SourceLocation) {
     const selected = location ?? source.locations[0]
-    if (!selected) {
-      setError('该来源没有可验证的行号，无法打开规范原文。')
+    const targetPath = source.kind === 'legacy_wiki' ? source.spec_path : source.path
+    if (!targetPath || !selected) {
+      if (source.kind !== 'legacy_wiki') {
+        setError('该来源没有可验证的行号，无法打开规范原文。')
+      }
       return
     }
     setOpenTarget({
-      path: source.path,
+      path: targetPath,
       startLine: selected.start_line,
       endLine: selected.end_line,
     })
@@ -449,7 +454,7 @@ function AnswerText({
   onCitationClick: (label: string) => void
 }) {
   const labels = useMemo(() => new Set(citations.map((citation) => citation.label)), [citations])
-  const parts = text.split(/(\[[ETCR]\d+\])/g)
+  const parts = text.split(/(\[[ETCRW]\d+\])/g)
   return (
     <>
       {parts.map((part, index) => labels.has(part) ? (
@@ -478,14 +483,15 @@ function EvidencePanel({
   onActivate: (label: string) => void
   onOpenSource: (source: EvidenceSource, location?: SourceLocation) => void
 }) {
-  const groups = answer.citations.reduce<{ spec: Citation[]; unknown: Citation[] }>(
+  const groups = answer.citations.reduce<{ spec: Citation[]; legacyWiki: Citation[]; unknown: Citation[] }>(
     (result, citation) => {
       const source = citationSource(citation, answer)
-      if (!source || source.kind !== 'spec') result.unknown.push(citation)
+      if (!source) result.unknown.push(citation)
+      else if (source.kind === 'legacy_wiki') result.legacyWiki.push(citation)
       else result.spec.push(citation)
       return result
     },
-    { spec: [], unknown: [] },
+    { spec: [], legacyWiki: [], unknown: [] },
   )
 
   return (
@@ -495,6 +501,21 @@ function EvidencePanel({
         <section className="evidence-group spec-group" aria-labelledby="spec-evidence-heading">
           <h3 className="evidence-group-title" id="spec-evidence-heading">规范原文 <small>Part 5 source</small></h3>
           {groups.spec.map((citation) => (
+            <CitationCard
+              key={`${citation.label}-${citation.id}`}
+              citation={citation}
+              source={citationSource(citation, answer)}
+              active={citation.label === activeCitation}
+              onActivate={onActivate}
+              onOpenSource={onOpenSource}
+            />
+          ))}
+        </section>
+      )}
+      {groups.legacyWiki.length > 0 && (
+        <section className="evidence-group legacy-wiki-group" aria-labelledby="legacy-wiki-evidence-heading">
+          <h3 className="evidence-group-title" id="legacy-wiki-evidence-heading">历史 Wiki 草稿 <small>已停用，非规范性</small></h3>
+          {groups.legacyWiki.map((citation) => (
             <CitationCard
               key={`${citation.label}-${citation.id}`}
               citation={citation}
@@ -560,7 +581,7 @@ function CitationCard({
         >
           {citation.label}
         </button>
-        {source && <span className={`source-badge ${source.kind}`}>{sourceKindLabel()}</span>}
+        {source && <span className={`source-badge ${source.kind}`}>{sourceKindLabel(source.kind)}</span>}
       </div>
       <strong className="citation-title">{citation.title}</strong>
       <code className="citation-id">{citation.id}</code>
@@ -583,17 +604,18 @@ function SourceMeta({
   compact?: boolean
 }) {
   const locations = source.locations
+  const canOpenSpec = source.kind === 'spec' || Boolean(source.spec_path)
   return (
     <div className={compact ? 'source-meta compact' : 'source-meta'}>
       <div className="source-meta-row">
-        <span className={`source-badge ${source.kind}`}>{sourceKindLabel()}</span>
+        <span className={`source-badge ${source.kind}`}>{sourceKindLabel(source.kind)}</span>
         <span className="source-version">{versionLabel(source.version)}</span>
-        <span className="source-status">
-          {sourceStatusLabel()}
+        <span className={source.kind === 'legacy_wiki' ? 'source-status warning' : 'source-status'}>
+          {sourceStatusLabel(source.kind)}
         </span>
       </div>
-      <code className="source-path">{source.path}</code>
-      {locations.length > 0 ? (
+      {source.path && <code className="source-path">{source.path}</code>}
+      {locations.length > 0 && canOpenSpec ? (
         <div className="source-locations" aria-label="规范原文来源位置">
           {locations.map((location, index) => (
             <button
@@ -608,7 +630,9 @@ function SourceMeta({
           ))}
         </div>
       ) : (
-        <span className="source-unavailable">行号不可用</span>
+        <span className="source-unavailable">
+          {source.kind === 'legacy_wiki' ? '历史 Wiki 页面已停用（无绑定规范行号）' : '行号不可用'}
+        </span>
       )}
     </div>
   )

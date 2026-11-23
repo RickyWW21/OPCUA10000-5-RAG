@@ -363,10 +363,12 @@ class SourceViewTests(unittest.TestCase):
         self.assertEqual("source/OPC-10000-5-v1.05.06.md", spec_retrieved["source"]["path"])
         self.assertEqual(5, spec_retrieved["source"]["locations"][0]["start_line"])
         self.assertEqual(20, spec_retrieved["source"]["locations"][0]["end_line"])
-        self.assertNotIn("source", wiki_citation)
-        self.assertNotIn("source", wiki_retrieved)
+        self.assertEqual("legacy_wiki", wiki_citation["source"]["kind"])
+        self.assertEqual("draft", wiki_citation["source"]["status"])
+        self.assertEqual("legacy_wiki", wiki_retrieved["source"]["kind"])
+        self.assertEqual("draft", wiki_retrieved["source"]["status"])
 
-    def test_enrich_result_strips_legacy_wiki_source_and_handles_w_label(self) -> None:
+    def test_enrich_result_normalizes_legacy_wiki_source_and_preserves_verified_spec_locations(self) -> None:
         legacy_wiki_citation = {
             "label": "[W1]",
             "title": "ServerType",
@@ -376,6 +378,10 @@ class SourceViewTests(unittest.TestCase):
                 "path": "wiki/entities/servertype.md",
                 "version": "1.05.06",
                 "url": "/api/v1/content?path=wiki/entities/servertype.md",
+                "locations": [
+                    {"section": "6.3.1", "table": "9", "start_line": 5, "end_line": 12},
+                    {"section": "99.9", "start_line": 9999, "end_line": 10010},
+                ],
             },
         }
         legacy_w_only_citation = {
@@ -385,11 +391,12 @@ class SourceViewTests(unittest.TestCase):
         }
         legacy_wiki_retrieved = {
             "label": "[W1]",
-            "id": "servertype",
+            "id": "wiki:servertype",
             "title": "ServerType",
             "source": {
                 "kind": "wiki",
                 "path": "wiki/entities/servertype.md",
+                "locations": [{"section": "6.3.1", "table": "9", "start_line": 5, "end_line": 12}],
             },
         }
         spec_citation = {
@@ -404,9 +411,23 @@ class SourceViewTests(unittest.TestCase):
             "title": "ServerType",
         }
 
-        self.assertIsNone(self.sv.source_for_citation(legacy_wiki_citation))
-        self.assertIsNone(self.sv.source_for_citation(legacy_w_only_citation))
-        self.assertIsNone(self.sv.source_for_retrieved(legacy_wiki_retrieved))
+        cit_source = self.sv.source_for_citation(legacy_wiki_citation)
+        self.assertIsNotNone(cit_source)
+        self.assertEqual("legacy_wiki", cit_source["kind"])
+        self.assertEqual("draft", cit_source["status"])
+        self.assertEqual("wiki/entities/servertype.md", cit_source["path"])
+        self.assertEqual("source/OPC-10000-5-v1.05.06.md", cit_source["spec_path"])
+        self.assertEqual(
+            [{"section": "6.3.1", "table": "9", "start_line": 5, "end_line": 12}],
+            cit_source["locations"],
+        )
+        self.assertNotIn("url", cit_source)
+
+        w_only_source = self.sv.source_for_citation(legacy_w_only_citation)
+        self.assertIsNotNone(w_only_source)
+        self.assertEqual("legacy_wiki", w_only_source["kind"])
+        self.assertEqual([], w_only_source["locations"])
+        self.assertNotIn("spec_path", w_only_source)
 
         result = {
             "answer": "ServerType [E1] [W1] [W2]",
@@ -416,9 +437,10 @@ class SourceViewTests(unittest.TestCase):
 
         enriched = self.sv.enrich_result(result)
 
-        self.assertNotIn("source", enriched["citations"][0])
-        self.assertNotIn("source", enriched["citations"][1])
-        self.assertNotIn("source", enriched["retrieved"][0])
+        self.assertEqual("legacy_wiki", enriched["citations"][0]["source"]["kind"])
+        self.assertEqual("source/OPC-10000-5-v1.05.06.md", enriched["citations"][0]["source"]["spec_path"])
+        self.assertEqual("legacy_wiki", enriched["citations"][1]["source"]["kind"])
+        self.assertEqual("legacy_wiki", enriched["retrieved"][0]["source"]["kind"])
         self.assertEqual("spec", enriched["citations"][2]["source"]["kind"])
         self.assertEqual(
             [{"section": "6.3.1", "start_line": 5, "end_line": 20}],

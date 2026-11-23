@@ -90,8 +90,10 @@ class SourceView:
             for item in retrieved:
                 if not isinstance(item, dict):
                     continue
-                if _strip_legacy_wiki_source(item):
-                    sources_by_id.setdefault(str(item.get("id") or ""), None)
+                if _is_legacy_wiki_record(item):
+                    legacy = self._legacy_wiki_source(item)
+                    item["source"] = legacy
+                    sources_by_id[str(item.get("id") or "")] = legacy
                     continue
                 try:
                     source = self.source_for_retrieved(item)
@@ -108,15 +110,17 @@ class SourceView:
             for citation in citations:
                 if not isinstance(citation, dict):
                     continue
-                if _strip_legacy_wiki_source(citation):
+                if _is_legacy_wiki_record(citation):
+                    existing = sources_by_id.get(str(citation.get("id") or ""))
+                    if isinstance(existing, dict) and existing.get("kind") == "legacy_wiki":
+                        citation["source"] = self._legacy_wiki_source(citation, fallback=existing)
+                    else:
+                        citation["source"] = self._legacy_wiki_source(citation)
                     continue
                 try:
-                    if _is_legacy_wiki_record(citation):
-                        source = None
-                    else:
-                        source = sources_by_id.get(str(citation.get("id") or ""))
-                        if source is None:
-                            source = self.source_for_citation(citation)
+                    source = sources_by_id.get(str(citation.get("id") or ""))
+                    if source is None:
+                        source = self.source_for_citation(citation)
                 except Exception:
                     source = None
                 if source is not None:
@@ -125,7 +129,7 @@ class SourceView:
 
     def source_for_retrieved(self, item: dict[str, Any]) -> dict[str, Any] | None:
         if _is_legacy_wiki_record(item):
-            return None
+            return self._legacy_wiki_source(item)
         provenance = item.get("provenance")
         record_id = str(item.get("id") or "")
         record_type = str(item.get("type") or "") or _infer_record_type(record_id)
@@ -147,7 +151,7 @@ class SourceView:
 
     def source_for_citation(self, citation: dict[str, Any]) -> dict[str, Any] | None:
         if _is_legacy_wiki_record(citation):
-            return None
+            return self._legacy_wiki_source(citation)
         provenance = citation.get("provenance")
         record_id = str(citation.get("id") or "")
         if isinstance(provenance, dict):
@@ -576,19 +580,101 @@ class SourceView:
         record = records.get(record_id)
         return record if isinstance(record, dict) else None
 
+    def _legacy_wiki_source(
+        self,
+        record: dict[str, Any],
+        *,
+        fallback: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Build a read-only historical marker for retired Wiki citations."""
+
+        source = record.get("source") if isinstance(record.get("source"), dict) else {}
+        provenance = record.get("provenance") if isinstance(record.get("provenance"), dict) else {}
+        wiki_path = ""
+        for candidate in (
+            source.get("path"),
+            provenance.get("path"),
+            fallback.get("path") if isinstance(fallback, dict) else None,
+        ):
+            if isinstance(candidate, str) and candidate.strip():
+                wiki_path = candidate.strip().replace("\\", "/")
+                break
+
+        spec_path = ""
+        manifest_version = ""
+        total_lines = 0
+        manifest = self._manifest()
+        if isinstance(manifest, dict):
+            spec_path = str(manifest.get("path") or "")
+            manifest_version = str(manifest.get("version") or "")
+            lines = manifest.get("lines")
+            if isinstance(lines, list):
+                total_lines = len(lines)
+
+        version = ""
+        for candidate in (
+            source.get("version"),
+            provenance.get("version"),
+            fallback.get("version") if isinstance(fallback, dict) else None,
+            manifest_version,
+        ):
+            if isinstance(candidate, str) and candidate.strip():
+                version = candidate.strip()
+                break
+
+        raw_locations: list[Any] = []
+        if isinstance(source.get("locations"), list):
+            raw_locations.extend(source["locations"])
+        if not raw_locations and isinstance(provenance.get("sources"), list):
+            raw_locations.extend(provenance["sources"])
+        if not raw_locations and isinstance(fallback, dict) and isinstance(fallback.get("locations"), list):
+            raw_locations.extend(fallback["locations"])
+
+        locations: list[dict[str, Any]] = []
+        seen: set[tuple[str | None, str | None, int, int]] = set()
+        if total_lines > 0 and spec_path:
+            for entry in raw_locations:
+                if not isinstance(entry, dict):
+                    continue
+                bounds = _line_range(entry)
+                if bounds is None and isinstance(entry.get("lines"), str):
+                    parts = entry["lines"].strip().split("-", 1)
+                    if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                        s, e = int(parts[0]), int(parts[1])
+                        if 1 <= s <= e:
+                            bounds = (s, e)
+                if bounds is None:
+                    continue
+                start_line, end_line = bounds
+                if start_line < 1 or end_line > total_lines:
+                    continue
+                section = str(entry["section"]).strip() if entry.get("section") else None
+                table = _clean_table(entry.get("table"))
+                key = (section, table, start_line, end_line)
+                if key in seen:
+                    continue
+                seen.add(key)
+                loc: dict[str, Any] = {"start_line": start_line, "end_line": end_line}
+                if section:
+                    loc["section"] = section
+                if table:
+                    loc["table"] = table
+                locations.append(loc)
+
+        payload: dict[str, Any] = {
+            "kind": "legacy_wiki",
+            "path": wiki_path,
+            "version": version,
+            "status": "draft",
+            "locations": locations,
+        }
+        if locations and spec_path:
+            payload["spec_path"] = spec_path
+        return payload
+
     def _relationships(self) -> list[Any]:
         records = self._call_kb("all_relationships")
         return records if isinstance(records, list) else []
-
-
-def _strip_legacy_wiki_source(record: dict[str, Any]) -> bool:
-    """Remove any persisted ``kind="wiki"`` source; return True if removed."""
-
-    source = record.get("source")
-    if isinstance(source, dict) and source.get("kind") == "wiki":
-        record.pop("source", None)
-        return True
-    return False
 
 
 def _is_legacy_wiki_record(record: dict[str, Any]) -> bool:
@@ -601,7 +687,7 @@ def _is_legacy_wiki_record(record: dict[str, Any]) -> bool:
         return True
     if isinstance(label, str) and _WIKI_LABEL.fullmatch(label.strip()):
         return True
-    if isinstance(source, dict) and source.get("kind") == "wiki":
+    if isinstance(source, dict) and source.get("kind") in {"wiki", "legacy_wiki"}:
         return True
     if isinstance(provenance, dict):
         path = provenance.get("path")

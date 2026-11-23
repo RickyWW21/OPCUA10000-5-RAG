@@ -141,6 +141,13 @@ E1 来源 URL 实际覆盖 §7.17 L2198–2220，能打开全部正确正文，�
 
 评估目录保留 `protocol.md`、`preflight.jsonl`／元数据、直连失败批次、正式批次、`review.json`、`audit.json` 及旧题审计回归 `audit-old-regression.json`。离线预检同样为 32 条、293 项来源检查全部通过，未据此调整题目或系统。
 
+> **归档复核说明（FTS5 精简后）：** `tools/check_wiki_evaluation.py` 与 `tools/evaluate_wiki_rag.py` 已在 RAG 架构精简提交 `7883c5f` 中下线。如需按本报告原样复核离线审计结果，请先在独立 worktree 中检出精简前基线快照 `4bc314d`（该提交完整保留了当时的脚本、Wiki 运行时与测试）：
+> ```powershell
+> git worktree add .worktrees/wiki-eval-4bc314d 4bc314d
+> cd .worktrees/wiki-eval-4bc314d
+> ```
+> 再执行下方命令：
+
 无需模型调用即可复核本次运行：
 
 ```powershell

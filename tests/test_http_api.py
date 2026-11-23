@@ -205,7 +205,9 @@ class HttpApiTests(unittest.TestCase):
             if source is not None:
                 self.assertNotEqual("wiki", source.get("kind"))
         wiki_citation = next(c for c in message["citations"] if c["label"] == "[W1]")
-        self.assertNotIn("source", wiki_citation)
+        self.assertEqual("legacy_wiki", wiki_citation["source"]["kind"])
+        self.assertEqual("draft", wiki_citation["source"]["status"])
+        self.assertEqual("wiki/entities/servertype.md", wiki_citation["source"]["path"])
 
     def test_fts_mode_is_available_without_loading_embedding_model(self) -> None:
         response = self.client.post(
@@ -215,6 +217,26 @@ class HttpApiTests(unittest.TestCase):
 
         self.assertEqual(200, response.status_code)
         self.assertEqual("fts", response.json()["retrieval_mode"])
+
+    def test_create_app_starts_without_manifest_and_returns_503_on_rag_query(self) -> None:
+        with TemporaryDirectory() as tmp:
+            missing_root = Path(tmp) / "missing_kb"
+            session_db = Path(tmp) / "sessions.sqlite3"
+            with patch.dict(os.environ, {"SESSION_DB_PATH": str(session_db)}, clear=False):
+                app = create_app(missing_root)
+            client = TestClient(app)
+
+            health = client.get("/api/v1/health")
+            self.assertEqual(200, health.status_code)
+            conversations = client.get("/api/v1/conversations")
+            self.assertEqual(200, conversations.status_code)
+
+            rag_response = client.post(
+                "/api/v1/rag/query",
+                json={"question": "ServerType"},
+            )
+            self.assertEqual(503, rag_response.status_code)
+            self.assertIn("source_manifest.json", rag_response.json()["detail"])
 
     def test_online_query_exposes_missing_model_configuration(self) -> None:
         with patch.dict(

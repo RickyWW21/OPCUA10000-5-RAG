@@ -1,4 +1,5 @@
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -23,6 +24,7 @@ class RetrievalTests(unittest.TestCase):
 
     def _rooted_kb(self, manifest: object) -> Mock:
         root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
         source = root / "source"
         source.mkdir()
         (source / "source_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -64,6 +66,7 @@ class RetrievalTests(unittest.TestCase):
 
         missing = Mock()
         missing.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, missing.root, ignore_errors=True)
         with self.assertRaises(ValueError):
             Part5Retriever(missing)
 
