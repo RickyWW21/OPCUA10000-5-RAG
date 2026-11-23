@@ -1,0 +1,81 @@
+// Run against the dev servers with Playwright available via PLAYWRIGHT_MODULE.
+const assert = require('node:assert/strict')
+const path = require('node:path')
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright')
+
+async function main() {
+  const browser = await chromium.launch({ channel: 'msedge', headless: true })
+  try {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+    const errors = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await page.goto(process.env.UI_URL || 'http://127.0.0.1:5173')
+    await page.locator('.conversation-item.active').waitFor({ timeout: 10000 })
+    await page.locator('textarea').fill('ServerType')
+    assert.equal(await page.getByRole('button', { name: /^Ask/ }).isEnabled(), true)
+    await page.getByRole('button', { name: /^Ask/ }).click()
+    await page.locator('.wiki-group').waitFor()
+    assert.match(await page.locator('.spec-group').innerText(), /1\.05\.06.*|L221-L302/s)
+    const wikiButton = page.locator('.message.assistant .answer-citation').filter({ hasText: '[W1]' }).first()
+    await wikiButton.click()
+    const dialog = page.getByRole('dialog')
+    await dialog.locator('.wiki-content').waitFor()
+    assert.match(await dialog.innerText(), /Wiki 草稿/)
+    assert.match(await dialog.innerText(), /未审核，非规范性/)
+    await page.screenshot({ path: path.join(__dirname, '../docs/evidence-desktop.png') })
+    await dialog.locator('.source-link').filter({ hasText: 'L225-L250' }).first().click()
+    await dialog.locator('.numbered-source').waitFor()
+    assert.equal(await dialog.locator('.line-number').first().innerText(), '225')
+    assert.equal(await dialog.locator('.line-number').last().innerText(), '250')
+    const actualLines = await dialog.locator('.line-text').allTextContents()
+    const fs = require('node:fs')
+    const sourceLines = fs.readFileSync(path.join(__dirname, '../source/OPC-10000-5-v1.05.06.md'), 'utf8').split(/\r?\n/)
+    assert.deepEqual(actualLines, sourceLines.slice(224, 250).map((line) => line || ' '))
+    await page.keyboard.press('Escape')
+    await dialog.waitFor({ state: 'hidden' })
+    assert.equal(await wikiButton.evaluate((element) => element === document.activeElement), true)
+    await wikiButton.click()
+    await dialog.locator('.wiki-content').waitFor()
+    await dialog.locator('.viewer-link:not(.source-link)').filter({ hasText: 'BaseObjectType' }).first().click()
+    await dialog.getByRole('heading', { name: 'BaseObjectType', exact: true }).waitFor()
+    await dialog.getByRole('button', { name: '关闭来源查看器' }).click()
+    await dialog.waitFor({ state: 'hidden' })
+
+    await page.reload()
+    await page.locator('.wiki-group').waitFor()
+    await page.locator('.spec-group .location-button').first().click()
+    await dialog.locator('.numbered-source').waitFor()
+    await page.keyboard.press('Escape')
+    await dialog.waitFor({ state: 'hidden' })
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.locator('.wiki-group .source-action').click()
+    await dialog.locator('.wiki-content').waitFor()
+    await page.screenshot({ path: path.join(__dirname, '../docs/evidence-mobile.png') })
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true)
+    const box = await dialog.boundingBox()
+    assert.ok(box && box.x >= 0 && box.x + box.width <= 391)
+    await dialog.getByRole('button', { name: '关闭来源查看器' }).click()
+    await dialog.waitFor({ state: 'hidden' })
+    await page.route('**/api/v1/content?**', (route) => route.fulfill({
+      status: 503, contentType: 'application/json', body: '{"detail":"Temporary source error"}',
+    }))
+    await page.locator('.wiki-group .source-action').click()
+    await dialog.getByRole('alert').waitFor()
+    assert.match(await dialog.getByRole('alert').innerText(), /Temporary source error/)
+    await page.unroute('**/api/v1/content?**')
+    await dialog.getByRole('button', { name: '重试', exact: true }).click()
+    await dialog.locator('.wiki-content').waitFor()
+    await dialog.getByRole('button', { name: '关闭来源查看器' }).click()
+    await dialog.waitFor({ state: 'hidden' })
+    assert.deepEqual(errors, [])
+    console.log('PASS: initial session, mixed citations, exact source lines, Wiki links, history, Escape/focus, desktop/mobile, error/retry')
+  } finally {
+    await browser.close()
+  }
+}
+
+main().catch((error) => {
+  console.error(error)
+  process.exitCode = 1
+})

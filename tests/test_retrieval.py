@@ -8,6 +8,19 @@ from opcua_kb.retrieval import Part5Retriever
 
 
 class RetrievalTests(unittest.TestCase):
+    def test_fts_chapter_intro_is_not_demoted_below_lower_ranked_tables(self):
+        kb = Mock()
+        kb.search.return_value = [
+            {"type": "table", "id": "table-C.1", "title": "Dictionary",
+             "snippet": "fields", "match_kind": "exact"},
+            {"type": "chunk", "id": "annex-intro", "title": "Annex intro",
+             "snippet": "Informative; deprecated.", "match_kind": "fts"},
+            {"type": "table", "id": "table-C.2", "title": "Other table",
+             "snippet": "other fields", "match_kind": "fts"},
+        ]
+        records = Part5Retriever(kb).retrieve("Annex C status", top_k=2)
+        self.assertEqual(["table-C.1", "annex-intro"], [record.id for record in records])
+
     def _rooted_kb(self, manifest: object) -> Mock:
         root = Path(tempfile.mkdtemp())
         source = root / "source"

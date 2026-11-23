@@ -1,0 +1,1246 @@
+{
+  "summary": {
+    "original": {
+      "gold_fact_units": 32,
+      "raw_content_units": 31,
+      "final_content_units": 31,
+      "final_cited_units": 31,
+      "final_spec_cited_units": 31,
+      "complete_normative_answers": 15,
+      "positive_cases": 16,
+      "trials": 16,
+      "generated": 16,
+      "wiki_selected_trials": 0,
+      "no_evidence_trials": 0,
+      "model_responses": 16,
+      "model_error_trials": 0,
+      "invalid_citation_trials": 0,
+      "source_checks": 91,
+      "source_checks_ok": 91,
+      "mean_context_chars": 7745.94,
+      "mean_latency_ms": 2501.9,
+      "median_latency_ms": 2365.3,
+      "diagnostic_safe_abstentions": 0,
+      "strict_diagnostic_passes": 0
+    },
+    "mixed": {
+      "gold_fact_units": 32,
+      "raw_content_units": 28.5,
+      "final_content_units": 28.5,
+      "final_cited_units": 28.5,
+      "final_spec_cited_units": 28.5,
+      "complete_normative_answers": 13,
+      "positive_cases": 16,
+      "trials": 16,
+      "generated": 15,
+      "wiki_selected_trials": 10,
+      "no_evidence_trials": 0,
+      "model_responses": 15,
+      "model_error_trials": 1,
+      "invalid_citation_trials": 0,
+      "source_checks": 202,
+      "source_checks_ok": 202,
+      "mean_context_chars": 11322.88,
+      "mean_latency_ms": 3917.34,
+      "median_latency_ms": 2512.85,
+      "diagnostic_safe_abstentions": 0,
+      "strict_diagnostic_passes": 0
+    }
+  },
+  "hashes_match": true,
+  "archived_code_used": [],
+  "credentials_absent": true,
+  "run_sha256": "83cd1fe26ed5c2d7791c3adc62d27d6e313a4e5047cbe2c0d4daaf64a32f4f1e",
+  "review_sha256": "3df3c87189168dae3cb056561f5d9ef010f48607f462a6872455b15ac4b45718",
+  "http_note": "In-process HTTP through the existing FastAPI TestClient; not a browser click test.",
+  "http_requests": [
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=3845&end_line=3857",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 3845,
+      "end_line": 3857,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=127&end_line=136",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 127,
+      "end_line": 136,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=127&end_line=135",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 127,
+      "end_line": 135,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=137&end_line=140",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 137,
+      "end_line": 140,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=137&end_line=139",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 137,
+      "end_line": 139,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=5455&end_line=5475",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 5455,
+      "end_line": 5475,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=129&end_line=135",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 129,
+      "end_line": 135,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=443&end_line=447",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 443,
+      "end_line": 447,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=9&end_line=11",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 9,
+      "end_line": 11,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=466&end_line=471",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 466,
+      "end_line": 471,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=wiki/topics/diagnostics.md",
+      "status": 200,
+      "kind": "wiki",
+      "version": "1.05.06",
+      "start_line": 1,
+      "end_line": 95,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=414&end_line=426",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 414,
+      "end_line": 426,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=453&end_line=463",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 453,
+      "end_line": 463,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=477&end_line=488",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 477,
+      "end_line": 488,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=491&end_line=497",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 491,
+      "end_line": 497,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=2704&end_line=2710",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2704,
+      "end_line": 2710,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2483&end_line=2484",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2483,
+      "end_line": 2484,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=167&end_line=180",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 167,
+      "end_line": 180,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=171&end_line=180",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 171,
+      "end_line": 180,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=167&end_line=179",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 167,
+      "end_line": 179,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=185&end_line=189",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 185,
+      "end_line": 189,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=1917&end_line=1933",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 1917,
+      "end_line": 1933,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=1939&end_line=1954",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 1939,
+      "end_line": 1954,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=4779&end_line=4787",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 4779,
+      "end_line": 4787,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=wiki/entities/buildinfotype.md",
+      "status": 200,
+      "kind": "wiki",
+      "version": "1.05.06",
+      "start_line": 1,
+      "end_line": 50,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=wiki/entities/serverstatustype.md",
+      "status": 200,
+      "kind": "wiki",
+      "version": "1.05.06",
+      "start_line": 1,
+      "end_line": 57,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=1935&end_line=1937",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 1935,
+      "end_line": 1937,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=4624&end_line=4632",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 4624,
+      "end_line": 4632,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=4636&end_line=4643",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 4636,
+      "end_line": 4643,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=266&end_line=266",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 266,
+      "end_line": 266,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=518&end_line=537",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 518,
+      "end_line": 537,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=4645&end_line=4671",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 4645,
+      "end_line": 4671,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=522&end_line=537",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 522,
+      "end_line": 537,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=518&end_line=536",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 518,
+      "end_line": 536,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=804&end_line=824",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 804,
+      "end_line": 824,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=905&end_line=923",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 905,
+      "end_line": 923,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=205&end_line=209",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 205,
+      "end_line": 209,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=211&end_line=217",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 211,
+      "end_line": 217,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=wiki/entities/auditeventtype.md",
+      "status": 200,
+      "kind": "wiki",
+      "version": "1.05.06",
+      "start_line": 1,
+      "end_line": 55,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=924&end_line=928",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 924,
+      "end_line": 928,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=931&end_line=942",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 931,
+      "end_line": 942,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=660&end_line=678",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 660,
+      "end_line": 678,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=660&end_line=677",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 660,
+      "end_line": 677,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=664&end_line=678",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 664,
+      "end_line": 678,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=5801&end_line=5813",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 5801,
+      "end_line": 5813,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=679&end_line=744",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 679,
+      "end_line": 744,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=3777&end_line=3790",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 3777,
+      "end_line": 3790,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=1588&end_line=1605",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 1588,
+      "end_line": 1605,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=5033&end_line=5049",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 5033,
+      "end_line": 5049,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=5455&end_line=5474",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 5455,
+      "end_line": 5474,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=5033&end_line=5048",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 5033,
+      "end_line": 5048,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=4676&end_line=4688",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 4676,
+      "end_line": 4688,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=827&end_line=841",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 827,
+      "end_line": 841,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=847&end_line=850",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 847,
+      "end_line": 850,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=wiki/topics/events-and-auditing.md",
+      "status": 200,
+      "kind": "wiki",
+      "version": "1.05.06",
+      "start_line": 1,
+      "end_line": 72,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=796&end_line=799",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 796,
+      "end_line": 799,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=931&end_line=944",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 931,
+      "end_line": 944,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=2714&end_line=2717",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2714,
+      "end_line": 2717,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=1606&end_line=1631",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 1606,
+      "end_line": 1631,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=1606&end_line=1630",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 1606,
+      "end_line": 1630,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=1613&end_line=1631",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 1613,
+      "end_line": 1631,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=9&end_line=12",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 9,
+      "end_line": 12,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=wiki/topics/server-information-model.md",
+      "status": 200,
+      "kind": "wiki",
+      "version": "1.05.06",
+      "start_line": 1,
+      "end_line": 77,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=201&end_line=203",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 201,
+      "end_line": 203,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=225&end_line=250",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 225,
+      "end_line": 250,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=2718&end_line=2725",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2718,
+      "end_line": 2725,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=2729&end_line=2910",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2729,
+      "end_line": 2910,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=429&end_line=435",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 429,
+      "end_line": 435,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=3230&end_line=3244",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 3230,
+      "end_line": 3244,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=1761&end_line=1789",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 1761,
+      "end_line": 1789,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=1761&end_line=1788",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 1761,
+      "end_line": 1788,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=1765&end_line=1782",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 1765,
+      "end_line": 1782,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=1794&end_line=1807",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 1794,
+      "end_line": 1807,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2198&end_line=2220",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2198,
+      "end_line": 2220,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2938&end_line=2949",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2938,
+      "end_line": 2949,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2208&end_line=2220",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2208,
+      "end_line": 2220,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2198&end_line=2219",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2198,
+      "end_line": 2219,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2221&end_line=2248",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2221,
+      "end_line": 2248,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2221&end_line=2247",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2221,
+      "end_line": 2247,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2235&end_line=2248",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2235,
+      "end_line": 2248,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=4779&end_line=4790",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 4779,
+      "end_line": 4790,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2249&end_line=2268",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2249,
+      "end_line": 2268,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=4080&end_line=4092",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 4080,
+      "end_line": 4092,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2255&end_line=2268",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2255,
+      "end_line": 2268,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2249&end_line=2267",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2249,
+      "end_line": 2267,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2663&end_line=2681",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2663,
+      "end_line": 2681,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2714&end_line=2911",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2714,
+      "end_line": 2911,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2663&end_line=2680",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2663,
+      "end_line": 2680,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2549&end_line=2566",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2549,
+      "end_line": 2566,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2976&end_line=3011",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2976,
+      "end_line": 3011,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2976&end_line=3010",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2976,
+      "end_line": 3010,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=3012&end_line=3042",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 3012,
+      "end_line": 3042,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=3012&end_line=3041",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 3012,
+      "end_line": 3041,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=3043&end_line=3079",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 3043,
+      "end_line": 3079,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=3035&end_line=3042",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 3035,
+      "end_line": 3042,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=1454&end_line=1485",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 1454,
+      "end_line": 1485,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=5112&end_line=5132",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 5112,
+      "end_line": 5132,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=5116&end_line=5123",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 5116,
+      "end_line": 5123,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=2273&end_line=2288",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2273,
+      "end_line": 2288,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=5112&end_line=5131",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 5112,
+      "end_line": 5131,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=5542&end_line=5554",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 5542,
+      "end_line": 5554,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=4184&end_line=4196",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 4184,
+      "end_line": 4196,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source/OPC-10000-5-v1.05.06.md&start_line=5542&end_line=5553",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 5542,
+      "end_line": 5553,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=wiki%2Fentities%2Fserverdiagnosticstype.md",
+      "status": 200,
+      "kind": "wiki",
+      "version": "1.05.06",
+      "start_line": 1,
+      "end_line": 52,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=wiki%2Fentities%2Fsessionsdiagnosticssummarytype.md",
+      "status": 200,
+      "kind": "wiki",
+      "version": "1.05.06",
+      "start_line": 1,
+      "end_line": 45,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=wiki%2Fentities%2Fsessiondiagnosticsobjecttype.md",
+      "status": 200,
+      "kind": "wiki",
+      "version": "1.05.06",
+      "start_line": 1,
+      "end_line": 48,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=wiki%2Fentities%2Fservertype.md",
+      "status": 200,
+      "kind": "wiki",
+      "version": "1.05.06",
+      "start_line": 1,
+      "end_line": 55,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=wiki%2Fentities%2Fbaseeventtype.md",
+      "status": 200,
+      "kind": "wiki",
+      "version": "1.05.06",
+      "start_line": 1,
+      "end_line": 57,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=wiki%2Fentities%2Fservercapabilitiestype.md",
+      "status": 200,
+      "kind": "wiki",
+      "version": "1.05.06",
+      "start_line": 1,
+      "end_line": 47,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=wiki%2Fentities%2Fbaseobjecttype.md",
+      "status": 200,
+      "kind": "wiki",
+      "version": "1.05.06",
+      "start_line": 1,
+      "end_line": 34,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=wiki%2Fentities%2Foperationlimitstype.md",
+      "status": 200,
+      "kind": "wiki",
+      "version": "1.05.06",
+      "start_line": 1,
+      "end_line": 58,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=wiki%2Fentities%2Fmodellingruletype.md",
+      "status": 200,
+      "kind": "wiki",
+      "version": "1.05.06",
+      "start_line": 1,
+      "end_line": 47,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=429&end_line=440",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 429,
+      "end_line": 440,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=501&end_line=504",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 501,
+      "end_line": 504,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=253&end_line=260",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 253,
+      "end_line": 260,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=847&end_line=861",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 847,
+      "end_line": 861,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=307&end_line=339",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 307,
+      "end_line": 339,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=342&end_line=345",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 342,
+      "end_line": 345,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=372&end_line=378",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 372,
+      "end_line": 378,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=401&end_line=408",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 401,
+      "end_line": 408,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=348&end_line=401",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 348,
+      "end_line": 401,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=605&end_line=624",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 605,
+      "end_line": 624,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=626&end_line=626",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 626,
+      "end_line": 626,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=628&end_line=648",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 628,
+      "end_line": 648,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=650&end_line=658",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 650,
+      "end_line": 658,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=1695&end_line=1702",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 1695,
+      "end_line": 1702,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=2918&end_line=2924",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2918,
+      "end_line": 2924,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=2930&end_line=2936",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2930,
+      "end_line": 2936,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=2942&end_line=2948",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2942,
+      "end_line": 2948,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=2954&end_line=2960",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2954,
+      "end_line": 2960,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=2966&end_line=2972",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 2966,
+      "end_line": 2972,
+      "ok": true
+    },
+    {
+      "url": "/api/v1/content?path=source%2FOPC-10000-5-v1.05.06.md&start_line=3279&end_line=3288",
+      "status": 200,
+      "kind": "spec",
+      "version": "1.05.06",
+      "start_line": 3279,
+      "end_line": 3288,
+      "ok": true
+    }
+  ]
+}

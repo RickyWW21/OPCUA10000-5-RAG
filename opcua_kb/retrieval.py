@@ -10,6 +10,7 @@ from typing import Any
 from .api import KnowledgeBase
 from .embeddings import EmbeddingError, EmbeddingProvider
 from .vector_index import VectorIndex, VectorIndexError
+from .wiki import search_wiki
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,8 @@ class RetrievedRecord:
     table_number: str | None = None
     doc: str = "OPC-10000-5"
     evidence: str | None = None
+    provenance: dict[str, Any] | None = None
+    source_records: tuple[RetrievedRecord, ...] = ()
 
 
 class Part5Retriever:
@@ -72,7 +75,9 @@ class Part5Retriever:
         candidate_limit = max(top_k * 3, 20)
         results = self.knowledge_base.search(question, top_k=candidate_limit)
         exact_results = [
-            result for result in results if result.get("type") in {"entity", "table", "chapter"}
+            result for result in results
+            if result.get("match_kind") == "exact"
+            or ("match_kind" not in result and result.get("type") in {"entity", "table", "chapter"})
         ]
         fts_results = [result for result in results if result not in exact_results]
         vector_results: list[dict[str, Any]] = []
@@ -94,27 +99,45 @@ class Part5Retriever:
         records: list[RetrievedRecord] = []
         seen: set[str] = set()
 
-        def add(raw: dict[str, Any], *, fallback_type: str = "relationship") -> None:
+        def make_record(raw: dict[str, Any], *, fallback_type: str) -> RetrievedRecord | None:
             doc = raw.get("doc", "OPC-10000-5")
             if doc != "OPC-10000-5":
-                return
+                return None
             record_id = raw.get("id") or raw.get("target") or raw.get("source")
-            if not isinstance(record_id, str) or record_id in seen:
-                return
-            seen.add(record_id)
+            if not isinstance(record_id, str):
+                return None
             record_type = str(raw.get("type") or fallback_type)
-            records.append(
-                RetrievedRecord(
-                    id=record_id,
-                    type=record_type,
-                    title=str(raw.get("title") or raw.get("relation") or record_id),
-                    snippet=str(raw.get("snippet") or raw.get("description") or ""),
-                    section=raw.get("section"),
-                    table_number=raw.get("table_number"),
-                    doc=doc,
-                    evidence=self._evidence_text(record_id, record_type),
-                )
+            raw_evidence = raw.get("evidence")
+            evidence = (
+                raw_evidence
+                if isinstance(raw_evidence, str) and raw_evidence.strip()
+                else self._evidence_text(record_id, record_type)
             )
+            provenance = raw.get("provenance")
+            return RetrievedRecord(
+                id=record_id,
+                type=record_type,
+                title=str(raw.get("title") or raw.get("relation") or record_id),
+                snippet=str(raw.get("snippet") or raw.get("description") or ""),
+                section=raw.get("section"),
+                table_number=raw.get("table_number"),
+                doc=doc,
+                evidence=evidence,
+                provenance=provenance if isinstance(provenance, dict) else None,
+                source_records=tuple(
+                    source_record
+                    for source in raw.get("companion_sources", [])
+                    if isinstance(source, dict)
+                    and (source_record := make_record(source, fallback_type="chunk")) is not None
+                ) if record_type == "wiki" else (),
+            )
+
+        def add(raw: dict[str, Any], *, fallback_type: str = "relationship") -> None:
+            record = make_record(raw, fallback_type=fallback_type)
+            if record is None or record.id in seen:
+                return
+            seen.add(record.id)
+            records.append(record)
 
         for result in primary_results:
             add(dict(result), fallback_type="chunk")
@@ -135,7 +158,79 @@ class Part5Retriever:
                         )
             if len(records) >= top_k:
                 break
-        return records[:top_k]
+
+        wiki_hits = self._wiki_hits(question, top_k, has_specification=bool(records))
+        if not wiki_hits:
+            return records[:top_k]
+
+        # Specification text stays authoritative.  Wiki records enter directly
+        # after the first specification result, or (when there is no original
+        # hit at all) only together with a real source chunk cited by the page.
+        result: list[RetrievedRecord] = []
+        result_ids: set[str] = set()
+        if records:
+            result.append(records[0])
+            result_ids.add(records[0].id)
+            for hit in wiki_hits:
+                raw = dict(hit)
+                raw.pop("companion_source", None)
+                record = make_record(raw, fallback_type="wiki")
+                if record is None or record.id in result_ids:
+                    continue
+                result_ids.add(record.id)
+                result.append(record)
+                if len(result) >= top_k:
+                    break
+            if len(result) < top_k:
+                for record in records[1:]:
+                    if record.id in result_ids:
+                        continue
+                    result_ids.add(record.id)
+                    result.append(record)
+                    if len(result) >= top_k:
+                        break
+            return result[:top_k]
+
+        for hit in wiki_hits:
+            raw = dict(hit)
+            companion = raw.pop("companion_source", None)
+            if isinstance(companion, dict):
+                source_record = make_record(companion, fallback_type="chunk")
+                if source_record is not None and source_record.id not in result_ids:
+                    result_ids.add(source_record.id)
+                    result.append(source_record)
+                if len(result) >= top_k:
+                    break
+            record = make_record(raw, fallback_type="wiki")
+            if record is None or record.id in result_ids:
+                continue
+            result_ids.add(record.id)
+            result.append(record)
+            if len(result) >= top_k:
+                break
+        return result[:top_k]
+
+    def _wiki_hits(
+        self, question: str, top_k: int, *, has_specification: bool
+    ) -> list[dict[str, Any]]:
+        """Read Wiki hits only for verified filesystem roots with a Wiki folder."""
+
+        root = getattr(self.knowledge_base, "root", None)
+        if not isinstance(root, (str, Path)):
+            return []
+        try:
+            if not (Path(root) / "wiki").is_dir():
+                return []
+        except OSError:
+            return []
+        if top_k == 1 and has_specification:
+            return []
+        budget = max(1, top_k // 3) if top_k >= 2 else 1
+        try:
+            return search_wiki(self.knowledge_base, question, top_k=budget)
+        except Exception:
+            # A malformed Wiki must never break the specification path.
+            return []
 
     def _evidence_text(self, record_id: str, record_type: str) -> str | None:
         """Hydrate original evidence through the public KnowledgeBase method.

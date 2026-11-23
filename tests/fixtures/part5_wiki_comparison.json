@@ -1,0 +1,504 @@
+[
+  {
+    "id": "Q01",
+    "question": "What is BaseObjectType used for, and does Part 5 require a server to expose all HasSubtype references from it?",
+    "category": "positive",
+    "expected_ids": [
+      "ObjectType:BaseObjectType",
+      "table-8",
+      "sec-6.2"
+    ],
+    "gold_facts": [
+      {
+        "id": "Q01.f1",
+        "claim": "BaseObjectType 用于对象没有更具体的类型定义时；服务器应尽量避免使用它，而应使用更具体的类型。",
+        "source": {
+          "section": "6.2",
+          "start_line": 207,
+          "end_line": 207
+        }
+      },
+      {
+        "id": "Q01.f2",
+        "claim": "所有其他 ObjectType 必须直接或间接继承 BaseObjectType，但不要求服务器提供从 BaseObjectType 到其全部子类型的 HasSubtype 引用。",
+        "source": {
+          "section": "6.2",
+          "start_line": 207,
+          "end_line": 207
+        }
+      }
+    ],
+    "reference_answer": "BaseObjectType 是所有 ObjectType 的基类型，在对象没有更具体的类型定义时使用；服务器应尽量避免直接使用它。所有其他 ObjectType 必须直接或间接继承它，但规范不要求服务器提供从 BaseObjectType 到所有子类型的完整 HasSubtype 引用。"
+  },
+  {
+    "id": "Q02",
+    "question": "ServerType 继承自哪个标准类型？它包含哪些必选和可选的标准组件或属性（请说明服务器数组、命名空间数组、服务器状态、能力、诊断和冗余等）？",
+    "category": "positive",
+    "expected_ids": [
+      "ObjectType:ServerType",
+      "ObjectType:BaseObjectType",
+      "table-9",
+      "sec-6.3.1"
+    ],
+    "gold_facts": [
+      {
+        "id": "Q02.f1",
+        "claim": "ServerType 是 BaseObjectType 的子类型。",
+        "source": {
+          "section": "6.3.1",
+          "table": "table-9",
+          "start_line": 225,
+          "end_line": 230
+        }
+      },
+      {
+        "id": "Q02.f2",
+        "claim": "Table 9 中 Mandatory 的标准项包括 ServerArray、NamespaceArray、ServerStatus、ServiceLevel、Auditing、ServerCapabilities、ServerDiagnostics、VendorServerInfo 和 ServerRedundancy；UrisVersion、EstimatedReturnTime、LocalTime 和 Namespaces 为 Optional。",
+        "source": {
+          "section": "6.3.1",
+          "table": "table-9",
+          "start_line": 231,
+          "end_line": 243
+        }
+      },
+      {
+        "id": "Q02.f3",
+        "claim": "GetMonitoredItems、ResendData、SetSubscriptionDurable 和 RequestServerStateChange 是 ServerType 下的 Optional Method 组件。",
+        "source": {
+          "section": "6.3.1",
+          "table": "table-9",
+          "start_line": 245,
+          "end_line": 248
+        }
+      }
+    ],
+    "reference_answer": "ServerType 是 BaseObjectType 的非抽象子类型。其必选项包括 ServerArray、NamespaceArray、ServerStatus、ServiceLevel、Auditing、ServerCapabilities、ServerDiagnostics、VendorServerInfo 和 ServerRedundancy；可选项包括 UrisVersion、EstimatedReturnTime、LocalTime、Namespaces，以及 GetMonitoredItems、ResendData、SetSubscriptionDurable、RequestServerStateChange 四个方法组件。"
+  },
+  {
+    "id": "Q03",
+    "question": "服务器在仍有客户端会话保持打开时，命名空间表应遵守哪些增删改规则？客户端缓存命名空间索引后，在开始会话时应如何校验其未变化？",
+    "category": "positive",
+    "expected_ids": [
+      "ObjectType:ServerType",
+      "table-9",
+      "sec-6.3.1"
+    ],
+    "gold_facts": [
+      {
+        "id": "Q03.f2",
+        "claim": "只要仍有客户端保持打开会话，服务器就不得修改或删除命名空间表中的条目，因为客户端可能缓存该表；但服务器可以在客户端连接期间增加条目。",
+        "source": {
+          "section": "6.3.1",
+          "start_line": 260,
+          "end_line": 260
+        }
+      },
+      {
+        "id": "Q03.f3",
+        "claim": "建议服务器只增加条目而不改变命名空间索引；缓存 NodeId 命名空间索引的客户端应在开始会话时检查缓存索引是否已变化。",
+        "source": {
+          "section": "6.3.1",
+          "start_line": 260,
+          "end_line": 260
+        }
+      }
+    ],
+    "reference_answer": "在仍有客户端会话打开期间，服务器不得修改或删除命名空间表条目，但可以追加条目；这是为了避免破坏客户端缓存。规范还建议只追加条目、不改变既有索引。若客户端缓存了 NodeId 中使用的命名空间索引，则应在开始会话时校验这些缓存索引没有变化。"
+  },
+  {
+    "id": "Q04",
+    "question": "ServerCapabilitiesType 的可选上限在服务器无法确定时应如何处理？MaxStringLength 表示什么，能否逐个变量覆盖，什么情况下不得提供？",
+    "category": "positive",
+    "expected_ids": [
+      "ObjectType:ServerCapabilitiesType",
+      "table-10",
+      "sec-6.3.2"
+    ],
+    "gold_facts": [
+      {
+        "id": "Q04.f1",
+        "claim": "MaxStringLength 表示服务器支持的 String 和 LocalizedText 的最大字节数，可由单个 DataVariable 上的同名 Property 覆盖；若服务器不施加最大字节数或无法确定该上限，则不得提供该 Property。",
+        "source": {
+          "section": "6.3.2",
+          "start_line": 367,
+          "end_line": 367
+        }
+      },
+      {
+        "id": "Q04.f2",
+        "claim": "对于可选组件，如果供应商无法确定其限值，则该组件不得包含在地址空间中。",
+        "source": {
+          "section": "6.3.2",
+          "start_line": 401,
+          "end_line": 401
+        }
+      }
+    ],
+    "reference_answer": "MaxStringLength 表示 String 和 LocalizedText 的最大字节数，允许在单个 DataVariable 上覆盖；如果服务器不限制长度或无法确定长度，则不得提供该 Property。更一般地，供应商无法确定某个可选组件的限值时，不应包含该组件。"
+  },
+  {
+    "id": "Q05",
+    "question": "ServerDiagnosticsType 的 EnabledFlag 在 TRUE 和 FALSE 时分别有什么作用？如果服务器不支持收集诊断信息，该属性应具有什么访问特性？",
+    "category": "positive",
+    "expected_ids": [
+      "ObjectType:ServerDiagnosticsType",
+      "table-11",
+      "sec-6.3.3"
+    ],
+    "gold_facts": [
+      {
+        "id": "Q05.f1",
+        "claim": "EnabledFlag 设为 TRUE 表示服务器收集诊断信息，并会重置和启用收集；设为 FALSE 表示不收集，并禁用收集但不重置已有诊断值。",
+        "source": {
+          "section": "6.3.3",
+          "start_line": 443,
+          "end_line": 443
+        }
+      },
+      {
+        "id": "Q05.f2",
+        "claim": "如果服务器不支持诊断信息收集，则 EnabledFlag Property 为只读。",
+        "source": {
+          "section": "6.3.3",
+          "start_line": 447,
+          "end_line": 447
+        }
+      }
+    ],
+    "reference_answer": "EnabledFlag 为 TRUE 时表示收集诊断信息，并会重置和启用收集；为 FALSE 时表示停止收集，但不会重置已有诊断值。如果服务器不支持诊断收集，EnabledFlag 为只读。"
+  },
+  {
+    "id": "Q06",
+    "question": "ServerDiagnosticsType 中的 SamplingIntervalDiagnosticsArray 是必选还是可选？它适用于什么采样方式，条目与 NodeId 有何稳定性要求，什么情况下可以不暴露？",
+    "category": "positive",
+    "expected_ids": [
+      "ObjectType:ServerDiagnosticsType",
+      "VariableType:SamplingIntervalDiagnosticsArrayType",
+      "table-11",
+      "sec-6.3.3"
+    ],
+    "gold_facts": [
+      {
+        "id": "Q06.f1",
+        "claim": "SamplingIntervalDiagnosticsArray 是 Table 11 中的 Optional 组件，其类型为 SamplingIntervalDiagnosticsDataType 数组，TypeDefinition 为 SamplingIntervalDiagnosticsArrayType。",
+        "source": {
+          "section": "6.3.3",
+          "table": "table-11",
+          "start_line": 421,
+          "end_line": 421
+        }
+      },
+      {
+        "id": "Q06.f2",
+        "claim": "该数组为服务器当前使用的每个采样率提供一个条目，并由 SamplingIntervalDiagnosticsArrayType 为每个数组条目提供对应 Variable。",
+        "source": {
+          "section": "6.3.3",
+          "start_line": 432,
+          "end_line": 432
+        }
+      },
+      {
+        "id": "Q06.f3",
+        "claim": "采样间隔诊断只由使用固定采样率集合的服务器收集；数组长度和变量集合由配置决定，只要配置不变，某个采样间隔诊断 Variable 的 NodeId 就不得改变；不使用固定采样率的服务器可以不暴露该数组。",
+        "source": {
+          "section": "6.3.3",
+          "start_line": 434,
+          "end_line": 434
+        }
+      }
+    ],
+    "reference_answer": "SamplingIntervalDiagnosticsArray 是可选组件，使用 SamplingIntervalDiagnosticsArrayType。它仅适用于使用固定采样率集合的服务器，每个当前采样率对应一个条目；数组长度和变量集合由配置决定，配置不变时相应 Variable 的 NodeId 必须保持稳定。若服务器不使用固定采样率，则可以不暴露该数组。"
+  },
+  {
+    "id": "Q07",
+    "question": "SessionsDiagnosticsSummaryType 中每个会话的 <ClientName> 对象是什么类型，其 BrowseName 如何形成？与会话安全相关的诊断信息在访问上应遵循什么原则？",
+    "category": "positive",
+    "expected_ids": [
+      "ObjectType:SessionsDiagnosticsSummaryType",
+      "ObjectType:SessionDiagnosticsObjectType",
+      "table-12",
+      "sec-6.3.4"
+    ],
+    "gold_facts": [
+      {
+        "id": "Q07.f1",
+        "claim": "SessionSecurityDiagnosticsArray 包含与安全相关的会话诊断信息，只应允许授权用户通过加密通道访问。",
+        "source": {
+          "section": "6.3.4",
+          "start_line": 469,
+          "end_line": 469
+        }
+      },
+      {
+        "id": "Q07.f2",
+        "claim": "服务器为每个会话提供一个由 <ClientName> 标识的对象，其类型为 SessionDiagnosticsObjectType；BrowseName 可由 CreateSession 服务的 sessionName 或其他服务器特定机制派生。",
+        "source": {
+          "section": "6.3.4",
+          "start_line": 471,
+          "end_line": 471
+        }
+      }
+    ],
+    "reference_answer": "每个会话对应一个由 <ClientName> 标识的对象，其类型为 SessionDiagnosticsObjectType；BrowseName 可从 CreateSession 的 sessionName 或服务器特定机制派生。SessionSecurityDiagnosticsArray 中的信息属于安全相关数据，应只允许授权用户通过加密通道访问。"
+  },
+  {
+    "id": "Q08",
+    "question": "OperationLimitsType 继承自什么类型，其限值属性是可选的还是必选的？对已提供的限值有什么非零要求，MaxNodesPerRead 具体表示什么？",
+    "category": "positive",
+    "expected_ids": [
+      "ObjectType:OperationLimitsType",
+      "table-20",
+      "sec-6.3.11"
+    ],
+    "gold_facts": [
+      {
+        "id": "Q08.f1",
+        "claim": "OperationLimitsType 是 FolderType 的子类型，并继承该类型的 InstanceDeclarations；Table 20 中列出的操作限值 Property 全部为 Optional。",
+        "source": {
+          "section": "6.3.11",
+          "table": "table-20",
+          "start_line": 605,
+          "end_line": 622
+        }
+      },
+      {
+        "id": "Q08.f2",
+        "claim": "任何已提供的操作限值 Property 都必须具有非零值；MaxNodesPerRead 表示客户端调用 Read 服务时 nodesToRead 数组的最大长度。",
+        "source": {
+          "section": "6.3.11",
+          "start_line": 626,
+          "end_line": 628
+        }
+      }
+    ],
+    "reference_answer": "OperationLimitsType 是 FolderType 的子类型，继承其 InstanceDeclarations；其操作限值属性均为可选。任何实际提供的限值都必须非零。MaxNodesPerRead 表示客户端调用 Read 服务时 nodesToRead 数组允许的最大长度。"
+  },
+  {
+    "id": "Q09",
+    "question": "For BaseEventType, what must a server return when Message has no description, and what is the valid range and meaning of Severity?",
+    "category": "positive",
+    "expected_ids": [
+      "EventType:BaseEventType",
+      "table-25",
+      "sec-6.4.2"
+    ],
+    "gold_facts": [
+      {
+        "id": "Q09.f1",
+        "claim": "Message 的 null 字符串不是有效值。如果服务器没有描述，应返回与该 Event 关联节点的 BrowseName 的字符串部分。",
+        "source": {
+          "section": "6.4.2",
+          "start_line": 847,
+          "end_line": 847
+        }
+      },
+      {
+        "id": "Q09.f2",
+        "claim": "Severity 的值范围为 1 到 1 000，1 表示最低严重性，1 000 表示最高严重性。",
+        "source": {
+          "section": "6.4.2",
+          "start_line": 850,
+          "end_line": 850
+        }
+      }
+    ],
+    "reference_answer": "Message 不能是 null 字符串；如果服务器没有可用的描述，必须返回与该 Event 关联节点的 BrowseName 的字符串部分。Severity 的有效范围是 1 至 1 000，其中 1 为最低严重性，1 000 为最高严重性。"
+  },
+  {
+    "id": "Q10",
+    "question": "AuditEventType 继承自哪个事件类型？当子类型未定义 SourceNode 时其默认值是什么？规范对新子类型增加额外 Property 有什么建议？",
+    "category": "positive",
+    "expected_ids": [
+      "EventType:AuditEventType",
+      "EventType:BaseEventType",
+      "table-26",
+      "sec-6.4.3"
+    ],
+    "gold_facts": [
+      {
+        "id": "Q10.f1",
+        "claim": "AuditEventType 是 BaseEventType 子类型，并继承 BaseEventType 的全部 Property。",
+        "source": {
+          "section": "6.4.3",
+          "table": "table-26",
+          "start_line": 908,
+          "end_line": 910
+        }
+      },
+      {
+        "id": "Q10.f2",
+        "claim": "AuditEvent 的来源由 BaseEventType Property 描述；若子类型未定义 SourceNode，则 SourceNode 必须设置为 Server 节点。",
+        "source": {
+          "section": "6.4.3",
+          "start_line": 924,
+          "end_line": 926
+        }
+      },
+      {
+        "id": "Q10.f3",
+        "claim": "建议 AuditEventType 的新子类型不要在核心 UA 规范已定义内容之外增加额外 Property，以便通用审计客户端用统一 EventFilter 收集信息。",
+        "source": {
+          "section": "6.4.3",
+          "start_line": 928,
+          "end_line": 928
+        }
+      }
+    ],
+    "reference_answer": "AuditEventType 是抽象的 BaseEventType 子类型，继承其全部 Property。若某个子类型没有定义 SourceNode，则 SourceNode 必须设置为 Server 节点。规范建议新子类型不要增加核心 UA 规范之外的额外 Property，以保持通用审计客户端过滤的兼容性。"
+  },
+  {
+    "id": "Q11",
+    "question": "BuildInfoType 有哪些必选 DataVariable，其 DataType BuildInfo 在 12.4 中又包含哪些字段？第 7.7 节把语义指向 12.3.15.1，这是否与实际小节不一致？",
+    "category": "positive",
+    "expected_ids": [
+      "VariableType:BuildInfoType",
+      "DataType:BuildInfo",
+      "table-77",
+      "table-230",
+      "sec-7.7",
+      "sec-12.4"
+    ],
+    "gold_facts": [
+      {
+        "id": "Q11.f1",
+        "claim": "BuildInfoType 是 DataType 为 BuildInfo 的复杂 VariableType，继承 BaseDataVariableType；其必选 DataVariable 为 ProductUri、ManufacturerName、ProductName、SoftwareVersion、BuildNumber 和 BuildDate。",
+        "source": {
+          "section": "7.7",
+          "start_line": 1935,
+          "end_line": 1952
+        }
+      },
+      {
+        "id": "Q11.f2",
+        "claim": "当前文档第 12.4 节的 Table 230 将 BuildInfo 结构定义为包含 productUri、manufacturerName、productName、softwareVersion、buildNumber 和 buildDate 六个字段。",
+        "source": {
+          "section": "12.4",
+          "table": "table-230",
+          "start_line": 4624,
+          "end_line": 4632
+        }
+      },
+      {
+        "id": "Q11.f3",
+        "claim": "第 7.7 节正文声称 BuildInfoType 的语义定义在 12.3.15.1，但 BuildInfo 在当前文档中的实际小节是 12.4，因此该交叉引用与实际位置不一致。",
+        "source": {
+          "section": "7.7",
+          "start_line": 1937,
+          "end_line": 1937
+        }
+      }
+    ],
+    "reference_answer": "BuildInfoType 的六个必选 DataVariable 是 ProductUri、ManufacturerName、ProductName、SoftwareVersion、BuildNumber 和 BuildDate，DataType 为 BuildInfo。BuildInfo 结构在 12.4 的 Table 230 中定义，字段为 productUri、manufacturerName、productName、softwareVersion、buildNumber 和 buildDate。第 7.7 节却引用 12.3.15.1，这与实际的 12.4 不一致，属于交叉引用异常。"
+  },
+  {
+    "id": "Q12",
+    "question": "ServerStatusDataType 包含哪些字段？secondsTillShutdown 和 shutdownReason 在什么状态下才有意义，关闭流程对已连接客户端有何考虑，没有特定关闭原因时如何表示？",
+    "category": "positive",
+    "expected_ids": [
+      "DataType:ServerStatusDataType",
+      "table-242",
+      "sec-12.10"
+    ],
+    "gold_facts": [
+      {
+        "id": "Q12.f1",
+        "claim": "ServerStatusDataType 包含 startTime、currentTime、state、buildInfo、secondsTillShutdown 和 shutdownReason 六个字段。",
+        "source": {
+          "section": "12.10",
+          "table": "table-242",
+          "start_line": 4781,
+          "end_line": 4787
+        }
+      },
+      {
+        "id": "Q12.f2",
+        "claim": "secondsTillShutdown 和 shutdownReason 仅在状态进入 SHUTDOWN_4 后有意义；启动关闭后，若仍有客户端连接，实际关闭应延迟一段可配置时间以便客户端有序断开，shutdownReason 可为 null 或空。",
+        "source": {
+          "section": "12.10",
+          "table": "table-242",
+          "start_line": 4786,
+          "end_line": 4787
+        }
+      }
+    ],
+    "reference_answer": "ServerStatusDataType 的字段为 startTime、currentTime、state、buildInfo、secondsTillShutdown 和 shutdownReason。后两个字段只在状态进入 SHUTDOWN_4 后有意义。进入关闭流程后，如果仍有客户端连接，服务器应将实际关闭延迟一段可配置时间，以便客户端有序断开；shutdownReason 可为 null 或空。"
+  },
+  {
+    "id": "Q13",
+    "question": "第 5 部分是否要求所有服务器都必须提供其定义的全部节点？该部分的范围是什么？",
+    "category": "positive",
+    "expected_ids": [
+      "sec-1"
+    ],
+    "gold_facts": [
+      {
+        "id": "Q13.f1",
+        "claim": "OPC 10000-5 定义信息模型，描述服务器地址空间中的标准化节点，包括标准化类型、用于诊断或作为服务器特定节点入口的标准化实例。",
+        "source": {
+          "section": "1",
+          "start_line": 9,
+          "end_line": 11
+        }
+      },
+      {
+        "id": "Q13.f2",
+        "claim": "该信息模型定义的是空 OPC UA 服务器的地址空间，但并不要求所有服务器都提供其中定义的全部节点。",
+        "source": {
+          "section": "1",
+          "start_line": 11,
+          "end_line": 11
+        }
+      }
+    ],
+    "reference_answer": "不是。第 5 部分定义信息模型和空 OPC UA 服务器的地址空间，包括标准化类型、诊断实例及服务器特定节点入口，但明确说明并不预期所有服务器都提供其中定义的全部节点。"
+  },
+  {
+    "id": "Q14",
+    "question": "In Annex C's TypeDictionary, what do TargetNamespace and DefaultByteOrder specify, and what is the status of this annex and its remaining “shall” statements?",
+    "category": "positive",
+    "expected_ids": [
+      "sec-Annex-C",
+      "table-C.1"
+    ],
+    "gold_facts": [
+      {
+        "id": "Q14.f1",
+        "claim": "Annex C 是 Informative 附录，并注明 OPC Binary Type Description System 已被弃用、未来版本将删除；其中剩余的 shall 仅作为弃用前版本的资料性遗留。",
+        "source": {
+          "section": "Annex C",
+          "start_line": 5754,
+          "end_line": 5758
+        }
+      },
+      {
+        "id": "Q14.f2",
+        "claim": "Table C.1 规定 TargetNamespace 是限定字典中所有 TypeDescription 的 URI；DefaultByteOrder 为所有 ByteOrderSignificant 为 true 的 TypeDescription 指定默认字节序，覆盖被导入字典的设置，但可被单个 TypeDescription 上的 DefaultByteOrder 覆盖。",
+        "source": {
+          "section": "Annex C",
+          "table": "table-C.1",
+          "start_line": 5789,
+          "end_line": 5795
+        }
+      }
+    ],
+    "reference_answer": "Annex C 是资料性附录，且已注明整个 OPC Binary Type Description System 被弃用、将在未来版本删除；其中剩余的 shall 只作为资料性遗留。Table C.1 中，TargetNamespace 是限定该字典内全部 TypeDescription 的 URI；DefaultByteOrder 为所有 ByteOrderSignificant 为 true 的 TypeDescription 提供默认字节序，覆盖被导入字典的默认值，但可被单个 TypeDescription 上的 DefaultByteOrder 覆盖。"
+  },
+  {
+    "id": "Q15",
+    "question": "请完整描述 CreateSession 服务的请求参数、响应参数以及会话状态机（包括所有状态与状态转换）。",
+    "category": "out_of_scope",
+    "expected_ids": [],
+    "gold_facts": [],
+    "reference_answer": "无法依据当前提供的第 5 部分文档完整回答。CreateSession 的请求/响应结构和会话状态机属于 OPC 10000-4（Services）的定义；第 5 部分仅在第 6.3.4 节提到会话诊断对象的 BrowseName 可能来自 CreateSession 的 sessionName，并未定义该服务的协议参数或状态机。因此需要查阅 OPC 10000-4，不能根据第 5 部分编造完整答案。",
+    "expected_behavior": "应明确说明该问题超出当前第 5 部分语料范围，需要 OPC 10000-4 的 CreateSession 定义；不得虚构请求/响应字段、状态或状态转换。"
+  },
+  {
+    "id": "Q16",
+    "question": "与上一版本相比，当前 1.05.06 版在信息模型上发生了哪些变化？",
+    "category": "context_dependent",
+    "expected_ids": [],
+    "gold_facts": [],
+    "reference_answer": "无法可靠回答。当前语料只包含 1.05.06 版本身，未提供上一版正文或官方变更记录，因此不能确定两个版本之间的差异。需要上一版文档或权威变更日志后才能进行可靠比较。",
+    "expected_behavior": "应指出缺少上一版本来源，不能把当前文本内容臆测为版本差异；应请求上一版文档或官方变更日志。"
+  }
+]

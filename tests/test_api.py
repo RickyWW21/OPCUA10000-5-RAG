@@ -29,6 +29,57 @@ class KnowledgeBaseTests(unittest.TestCase):
         self.assertEqual("ObjectType:ServerType", results[0]["id"])
         self.assertEqual("DataType:BuildInfo", results[1]["id"])
 
+    def test_chinese_namespace_paraphrases_recall_english_original(self) -> None:
+        conn = sqlite3.connect(self.root / "indexes/fts.sqlite")
+        try:
+            conn.execute(
+                "INSERT INTO search_fts VALUES (?, ?, ?, ?, ?, ?)",
+                ("chunk", "namespace-rule", "NamespaceArray", "6.3.1", "",
+                 "NamespaceArray entries may be cached by a Session client."),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        for question in ("命名空间列表何时允许变化？", "缓存命名空间索引需要检查什么？"):
+            with self.subTest(question=question):
+                results = self.kb.search(question, top_k=1)
+                self.assertTrue(results)
+                self.assertEqual("namespace-rule", results[0]["id"])
+
+    def test_part_number_is_not_mistaken_for_a_chapter_number(self) -> None:
+        write_jsonl(self.root / "kb" / "chapters.jsonl", [{
+            "id": "sec-5", "section": "5", "title": "Common Attributes", "text": "Attributes",
+        }])
+        conn = sqlite3.connect(self.root / "indexes/fts.sqlite")
+        try:
+            conn.execute(
+                "INSERT INTO search_fts VALUES (?, ?, ?, ?, ?, ?)",
+                ("chunk", "scope-rule", "Scope", "1", "", "Scope of this Part."),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        self.assertEqual("scope-rule", self.kb.search("第5部分的范围是什么？", top_k=1)[0]["id"])
+
+    def test_chinese_annex_reference_limits_results_to_that_annex(self) -> None:
+        write_jsonl(self.root / "kb" / "chapters.jsonl", [{
+            "id": "sec-Annex-C", "section": "Annex C", "title": "Binary", "text": "Informative",
+        }])
+        conn = sqlite3.connect(self.root / "indexes/fts.sqlite")
+        try:
+            conn.executemany(
+                "INSERT INTO search_fts VALUES (?, ?, ?, ?, ?, ?)",
+                [("chunk", "intro-c", "Annex", "Annex C", "", "Annex status informative"),
+                 ("chunk", "intro-d", "Annex", "Annex D", "", "Annex status informative")],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        self.assertEqual(
+            ["sec-Annex-C", "intro-c"],
+            [item["id"] for item in self.kb.search("附录C的状态", top_k=4)],
+        )
+
     def test_relationships_are_breadth_first_and_filterable(self) -> None:
         relationships = self.kb.relationships(
             "server", depth=2, relation="has_component"

@@ -31,6 +31,56 @@ class FailingChatModel:
 
 
 class RAGTests(unittest.TestCase):
+    def test_flattened_table_9_footnotes_are_explained_without_rewriting_source(self):
+        raw = (
+            "HasComponent,Variable,ServerStatus1,ServerStatusDataType ServerStatusType,Mandatory\n"
+            "HasComponent,Object,ServerCapabilities1,- ServerCapabilitiesType,Mandatory\n"
+            "HasComponent,Object,ServerDiagnostics1,- ServerDiagnosticsType,Mandatory\n"
+            "HasComponent,Object,ServerRedundancy1,- ServerRedundancyType,Mandatory\n"
+            "HasComponent,Object,Channel1,- ChannelType,Optional"
+        )
+        for kind in ("entity", "table", "chunk", "chapter"):
+            with self.subTest(kind=kind):
+                record = RetrievedRecord(
+                    "table-9", kind, "ServerType", "", section="6.3.1",
+                    table_number="9", evidence=raw,
+                )
+                result = RAGPipeline(retriever=EvidenceRetriever([record])).ask("Members?")
+                text = result.retrieved[0]["snippet"]
+                self.assertTrue(text.startswith(raw))
+                for clarification in (
+                    "ServerStatus1 -> ServerStatus",
+                    "ServerCapabilities1 -> ServerCapabilities",
+                    "ServerDiagnostics1 -> ServerDiagnostics",
+                    "ServerRedundancy1 -> ServerRedundancy",
+                ):
+                    self.assertIn(clarification, text)
+                self.assertNotIn("Channel1 -> Channel", text)
+                self.assertIn(raw, result.answer)
+                self.assertEqual(raw, record.evidence)
+
+    def test_table_9_name_notes_obey_evidence_budget_and_do_not_affect_other_tables(self):
+        raw = "HasComponent,Object,ServerCapabilities1,- ServerCapabilitiesType,Mandatory"
+        record = RetrievedRecord(
+            "table-9", "table", "Definition", "", section="6.3.1",
+            table_number="9", evidence=raw,
+        )
+        model = RecordingChatModel("ServerCapabilities [T1].")
+        result = RAGPipeline(
+            retriever=EvidenceRetriever([record]), chat_model=model,
+            max_context_chars=len(f"[T1] Definition\n{raw}"),
+        ).ask("Members?")
+        self.assertEqual("offline", result.mode)
+        self.assertEqual(0, model.calls)
+        self.assertEqual([], result.citations)
+
+        other = RetrievedRecord(
+            "table-999", "table", "Other", "", section="8.1",
+            table_number="999", evidence=raw,
+        )
+        result = RAGPipeline(retriever=EvidenceRetriever([other])).ask("Members?")
+        self.assertEqual(raw, result.retrieved[0]["snippet"])
+
     def test_pipeline_offline_answer_contains_part5_citations(self):
         result = RAGPipeline(retriever=FixtureRetriever()).ask("What is ServerType?", top_k=2)
         self.assertEqual(result.mode, "offline")

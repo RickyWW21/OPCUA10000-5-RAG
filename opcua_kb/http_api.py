@@ -17,6 +17,7 @@ from .llm import LLMError, OpenAICompatibleChatModel
 from .rag import RAGPipeline
 from .retrieval import Part5Retriever
 from .session_store import SessionStore
+from .source_view import SourceView, SourceViewError
 from .vector_index import VectorIndex
 
 
@@ -40,6 +41,7 @@ def create_app(root: str | Path | None = None) -> FastAPI:
     app = FastAPI(title="OPC UA 10000-5 RAG API", version="1.0.0")
     app.state.knowledge_base = KnowledgeBase(root_path)
     app.state.root = root_path
+    app.state.source_view = SourceView(root_path, app.state.knowledge_base)
     app.state.retrievers = {}
     app.state.sessions = SessionStore(
         os.getenv("SESSION_DB_PATH", str(root_path / "data" / "rag_sessions.sqlite3")),
@@ -103,6 +105,7 @@ def create_app(root: str | Path | None = None) -> FastAPI:
         conversation = app.state.sessions.get_conversation(session_id, conversation_id)
         if conversation is None:
             raise HTTPException(status_code=404, detail="conversation not found")
+        _enrich_conversation(app, conversation)
         return conversation
 
     @app.delete("/api/v1/conversations/{conversation_id}")
@@ -139,6 +142,19 @@ def create_app(root: str | Path | None = None) -> FastAPI:
             }
         )
         return result
+
+    @app.get("/api/v1/content")
+    def content(
+        path: str = Query(min_length=1, max_length=512),
+        start_line: int | None = Query(default=None, ge=1),
+        end_line: int | None = Query(default=None, ge=1),
+    ) -> dict[str, object]:
+        try:
+            return app.state.source_view.content(
+                path, start_line=start_line, end_line=end_line
+            )
+        except SourceViewError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
     @app.get("/api/v1/search")
     def search(q: str = Query(min_length=1), top_k: int = Query(default=6, ge=1, le=20)) -> dict[str, object]:
@@ -191,7 +207,7 @@ def _execute_query(app: FastAPI, request: QueryRequest) -> dict[str, object]:
         top_k=request.top_k,
         relationship_depth=request.relationship_depth,
     )
-    return {
+    result: dict[str, object] = {
         "answer": answer.answer,
         "mode": answer.mode,
         "retrieval_mode": retriever.last_mode,
@@ -199,6 +215,20 @@ def _execute_query(app: FastAPI, request: QueryRequest) -> dict[str, object]:
         "retrieved": answer.retrieved,
         "error": answer.error or model_error,
     }
+    app.state.source_view.enrich_result(result)
+    return result
+
+
+def _enrich_conversation(app: FastAPI, conversation: dict[str, object]) -> None:
+    """Add source metadata to legacy and current messages at read time."""
+
+    messages = conversation.get("messages")
+    if not isinstance(messages, list):
+        return
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            continue
+        app.state.source_view.enrich_result(message)
 
 
 def _persist_exchange(
