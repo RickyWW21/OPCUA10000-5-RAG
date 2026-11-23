@@ -13,7 +13,15 @@
 - Entities: 262
 - Relationships: 2537
 
-## 常用命令
+## 检索架构
+
+本知识库采用精简的 **纯规范 FTS5（Spec-only FTS5）** 检索架构：
+
+- 仅使用精确实体/章节/表格匹配与 SQLite FTS5 全文索引（`indexes/fts.sqlite`）对 OPC UA 10000-5 Part 5 原文规范记录进行检索。
+- 不依赖本地向量索引或外部 Wiki 混合检索，保持检索路径无状态且引用完全可溯源。
+- 提供三种主要入口：Core CLI（`tools/`）、TUI（`tui.py`）和 Web Console（`api_server.py` + `web/`）。
+
+## 常用命令（Core CLI / `tools/`）
 
 ```powershell
 python help.py
@@ -23,6 +31,7 @@ python tools/inspect_entity.py ServerType
 python tools/trace_entity.py ServerType --relation HAS_COMPONENT --depth 1
 python tools/demo_graph.py
 python tools/graph_kb.py --format html --output exports/knowledge_graph.html
+python tools/evaluate_retrieval.py
 ```
 
 ## Help / 帮助菜单
@@ -43,7 +52,7 @@ python tools/ask_kb.py "ServerType 包含哪些组件？" --top-k 5
 python tools/ask_kb.py "ServerType 包含哪些组件？" --offline
 ```
 
-命令会输出回答模式、Part 5 引用标签和检索记录 ID。请将 API 密钥保存在环境变量中。
+命令会输出回答模式、Part 5 引用标签和检索记录 ID（离线模式下仅基于本地精确匹配与 SQLite FTS5 检索）。请将 API 密钥保存在环境变量中。
 
 每个 CLI 也支持 `--help`：
 
@@ -54,6 +63,8 @@ python tools/inspect_entity.py --help
 python tools/trace_entity.py --help
 python tools/demo_graph.py --help
 python tools/graph_kb.py --help
+python tools/ask_kb.py --help
+python tools/evaluate_retrieval.py --help
 ```
 
 ## 功能概览
@@ -65,7 +76,7 @@ python tools/graph_kb.py --help
 - 设计知识图谱：生成 JSON 或离线 HTML，显示实体之间的关系类型和关联度权重。
 - Python API：通过 `from opcua_kb import KnowledgeBase` 在本地脚本中调用。
 
-## TUI 交互界面
+## TUI 交互界面（`tui.py`）
 
 首次使用时安装可选的 TUI 依赖：
 
@@ -79,26 +90,10 @@ python -m pip install -r requirements-tui.txt
 python tui.py
 ```
 
-TUI 提供搜索、实体详情、关系追踪、章节/表格浏览，以及交互式知识图谱导出。
+TUI 提供搜索、实体详情、关系追踪、章节/表格浏览、Part 5 RAG 问答，以及交互式知识图谱导出。
 使用 `Tab` 在控件间移动，`Enter` 执行操作，`Ctrl+F` 回到搜索，`Ctrl+Q` 退出。
 
-## Streamlit RAG Web 前端
-
-安装 Web 前端依赖：
-
-```powershell
-python -m pip install -r requirements-streamlit.txt
-```
-
-启动浏览器前端：
-
-```powershell
-python -m streamlit run streamlit_app.py
-```
-
-Web 前端支持多轮问答、`auto / hybrid / fts` 检索模式、证据数量、关系扩展深度、在线生成开关，以及回答引用和检索证据展开查看。语言模型仍通过 `DEEPSEEK_API_KEY` 或 `OPENAI_API_KEY` 环境变量配置。
-
-## FastAPI + React 前端
+## Web 控制台（`api_server.py` + `web/`）
 
 安装后端依赖：
 
@@ -126,7 +121,7 @@ React 开发服务器默认通过 `/api` 代理到 `http://127.0.0.1:8000`。部
 $env:CORS_ORIGINS = "http://localhost:5173,https://rag.example.com"
 ```
 
-FastAPI 提供 `/docs`、`/redoc` 和 `/openapi.json`，React 前端保留现有 Streamlit 前端不受影响。
+FastAPI 提供 `/docs`、`/redoc` 和 `/openapi.json`，语言模型通过 `DEEPSEEK_API_KEY` 或 `OPENAI_API_KEY` 环境变量配置。
 
 React 端使用匿名 `HttpOnly` Cookie 识别浏览器会话，不需要用户登录。会话、对话、消息、引用和检索证据默认保存在项目根目录的 `data/rag_sessions.sqlite3`。可通过环境变量调整：
 
