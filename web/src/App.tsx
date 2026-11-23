@@ -9,10 +9,9 @@ type SourceLocation = {
   end_line: number
 }
 type EvidenceSource = {
-  kind: 'wiki' | 'spec'
+  kind: 'spec'
   path: string
   version: string
-  status?: string | null
   locations: SourceLocation[]
   url?: string
 }
@@ -55,23 +54,15 @@ type StoredMessage = {
   retrieved: RetrievedRecord[]
 }
 type Message = { role: 'user' | 'assistant'; text: string; answer?: Answer }
-type ContentLink = {
-  label: string
-  path: string
-  start_line?: number | null
-  end_line?: number | null
-}
 type ContentResponse = {
-  kind: 'wiki' | 'spec'
+  kind: 'spec'
   path: string
   title: string
   version: string
-  status?: string | null
   start_line: number
   end_line: number
   content: string
   locations: SourceLocation[]
-  links: ContentLink[]
 }
 type OpenTarget = { path: string; startLine?: number; endLine?: number }
 
@@ -111,14 +102,11 @@ function versionLabel(version: string | null | undefined): string {
   return value.toLowerCase().startsWith('v') ? value : `v${value}`
 }
 
-function sourceKindLabel(source: EvidenceSource): string {
-  return source.kind === 'wiki' ? 'Wiki 草稿' : '规范原文'
+function sourceKindLabel(): string {
+  return '规范原文'
 }
 
-function sourceStatusLabel(source: EvidenceSource): string {
-  if (source.kind === 'wiki') {
-    return source.status === 'draft' ? 'draft · 未审核，非规范性' : '未审核，非规范性'
-  }
+function sourceStatusLabel(): string {
   return 'OPC UA Part 5'
 }
 
@@ -155,7 +143,6 @@ async function responseError(response: Response): Promise<string> {
 
 function App() {
   const [question, setQuestion] = useState('')
-  const [mode, setMode] = useState<'auto' | 'hybrid' | 'fts'>('auto')
   const [topK, setTopK] = useState(6)
   const [depth, setDepth] = useState(0)
   const [online, setOnline] = useState(false)
@@ -281,7 +268,6 @@ function App() {
         signal: controller.signal,
         body: JSON.stringify({
           question: trimmed,
-          retrieval_mode: mode,
           top_k: topK,
           relationship_depth: depth,
           online,
@@ -306,10 +292,6 @@ function App() {
   }
 
   function openSource(source: EvidenceSource, location?: SourceLocation) {
-    if (source.kind === 'wiki') {
-      setOpenTarget({ path: source.path })
-      return
-    }
     const selected = location ?? source.locations[0]
     if (!selected) {
       setError('该来源没有可验证的行号，无法打开规范原文。')
@@ -362,14 +344,6 @@ function App() {
               </button>
             ))}
           </div>
-          <label>
-            Retrieval mode
-            <select value={mode} onChange={(event) => setMode(event.target.value as typeof mode)}>
-              <option value="auto">Auto</option>
-              <option value="hybrid">Hybrid</option>
-              <option value="fts">FTS5 only</option>
-            </select>
-          </label>
           <label>
             Evidence count
             <input type="range" min="1" max="20" value={topK} onChange={(event) => setTopK(Number(event.target.value))} />
@@ -458,7 +432,6 @@ function App() {
       <ContentViewer
         target={openTarget}
         onClose={() => setOpenTarget(null)}
-        onNavigate={setOpenTarget}
       />
     </main>
   )
@@ -476,7 +449,7 @@ function AnswerText({
   onCitationClick: (label: string) => void
 }) {
   const labels = useMemo(() => new Set(citations.map((citation) => citation.label)), [citations])
-  const parts = text.split(/(\[[ETCRW]\d+\])/g)
+  const parts = text.split(/(\[[ETCR]\d+\])/g)
   return (
     <>
       {parts.map((part, index) => labels.has(part) ? (
@@ -505,35 +478,19 @@ function EvidencePanel({
   onActivate: (label: string) => void
   onOpenSource: (source: EvidenceSource, location?: SourceLocation) => void
 }) {
-  const groups = answer.citations.reduce<{ wiki: Citation[]; spec: Citation[]; unknown: Citation[] }>(
+  const groups = answer.citations.reduce<{ spec: Citation[]; unknown: Citation[] }>(
     (result, citation) => {
       const source = citationSource(citation, answer)
-      if (!source) result.unknown.push(citation)
-      else if (source.kind === 'wiki') result.wiki.push(citation)
+      if (!source || source.kind !== 'spec') result.unknown.push(citation)
       else result.spec.push(citation)
       return result
     },
-    { wiki: [], spec: [], unknown: [] },
+    { spec: [], unknown: [] },
   )
 
   return (
     <div className="evidence-list">
       <div className="evidence-summary"><strong>{answer.citations.length}</strong><span>citations</span><strong>{answer.retrieved.length}</strong><span>records</span></div>
-      {groups.wiki.length > 0 && (
-        <section className="evidence-group wiki-group" aria-labelledby="wiki-evidence-heading">
-          <h3 className="evidence-group-title" id="wiki-evidence-heading">Wiki 草稿 <small>未审核，非规范性</small></h3>
-          {groups.wiki.map((citation) => (
-            <CitationCard
-              key={`${citation.label}-${citation.id}`}
-              citation={citation}
-              source={citationSource(citation, answer)}
-              active={citation.label === activeCitation}
-              onActivate={onActivate}
-              onOpenSource={onOpenSource}
-            />
-          ))}
-        </section>
-      )}
       {groups.spec.length > 0 && (
         <section className="evidence-group spec-group" aria-labelledby="spec-evidence-heading">
           <h3 className="evidence-group-title" id="spec-evidence-heading">规范原文 <small>Part 5 source</small></h3>
@@ -603,7 +560,7 @@ function CitationCard({
         >
           {citation.label}
         </button>
-        {source && <span className={`source-badge ${source.kind}`}>{sourceKindLabel(source)}</span>}
+        {source && <span className={`source-badge ${source.kind}`}>{sourceKindLabel()}</span>}
       </div>
       <strong className="citation-title">{citation.title}</strong>
       <code className="citation-id">{citation.id}</code>
@@ -629,27 +586,22 @@ function SourceMeta({
   return (
     <div className={compact ? 'source-meta compact' : 'source-meta'}>
       <div className="source-meta-row">
-        <span className={`source-badge ${source.kind}`}>{sourceKindLabel(source)}</span>
+        <span className={`source-badge ${source.kind}`}>{sourceKindLabel()}</span>
         <span className="source-version">{versionLabel(source.version)}</span>
-        <span className={source.kind === 'wiki' ? 'source-status warning' : 'source-status'}>
-          {sourceStatusLabel(source)}
+        <span className="source-status">
+          {sourceStatusLabel()}
         </span>
       </div>
       <code className="source-path">{source.path}</code>
-      {source.kind === 'wiki' && (
-        <button className="source-action" type="button" onClick={() => onOpenSource(source)}>
-          查看完整 Wiki 页面及原文链接
-        </button>
-      )}
       {locations.length > 0 ? (
-        <div className="source-locations" aria-label={`${sourceKindLabel(source)}来源位置`}>
+        <div className="source-locations" aria-label="规范原文来源位置">
           {locations.map((location, index) => (
             <button
               className="location-button"
               key={`${location.section ?? 'section'}-${location.table ?? 'table'}-${location.start_line}-${location.end_line}-${index}`}
               type="button"
-              onClick={() => onOpenSource(source, source.kind === 'spec' ? location : undefined)}
-              title={source.kind === 'wiki' ? '打开完整 Wiki 页面；原文链接在页面内' : '打开规范原文对应行范围'}
+              onClick={() => onOpenSource(source, location)}
+              title="打开规范原文对应行范围"
             >
               {locationLabel(location)}
             </button>
@@ -676,11 +628,9 @@ function EvidenceSnippet({ text }: { text: string }) {
 function ContentViewer({
   target,
   onClose,
-  onNavigate,
 }: {
   target: OpenTarget | null
   onClose: () => void
-  onNavigate: (target: OpenTarget) => void
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const closingOnUnmount = useRef(false)
@@ -774,7 +724,7 @@ function ContentViewer({
             </div>
           )}
           {viewerState.status === 'ready' && (
-            <ContentViewerBody data={viewerState.data} onNavigate={onNavigate} />
+            <ContentViewerBody data={viewerState.data} />
           )}
         </div>
       </div>
@@ -784,27 +734,17 @@ function ContentViewer({
 
 function ContentViewerBody({
   data,
-  onNavigate,
 }: {
   data: ContentResponse
-  onNavigate: (target: OpenTarget) => void
 }) {
-  const links = data.links
   const locations = data.locations
-  const wikiLinks = links.filter((link) => link.path.startsWith('wiki/'))
-  const sourceLinks = links.filter((link) => link.path.startsWith('source/'))
   const sourceLines = data.content.split('\n')
 
   return (
     <>
       <div className="viewer-meta">
-        <span className={`source-badge ${data.kind}`}>{data.kind === 'wiki' ? 'Wiki 草稿' : '规范原文'}</span>
+        <span className="source-badge spec">规范原文</span>
         <span className="source-version">{versionLabel(data.version)}</span>
-        {data.kind === 'wiki' && (
-          <span className="source-status warning">
-            {data.status === 'draft' ? 'draft · 未审核，非规范性' : '未审核，非规范性'}
-          </span>
-        )}
         <code className="source-path">{data.path}</code>
       </div>
       {locations.length > 0 && (
@@ -816,60 +756,14 @@ function ContentViewerBody({
           ))}
         </div>
       )}
-      {data.kind === 'wiki' && (wikiLinks.length > 0 || sourceLinks.length > 0) && (
-        <section className="viewer-links" aria-label="相关 Wiki 和规范原文链接">
-          {wikiLinks.length > 0 && (
-            <div>
-              <h3>相关 Wiki 页面</h3>
-              <div className="viewer-link-list">
-                {wikiLinks.map((link, index) => (
-                  <button
-                    className="viewer-link"
-                    key={`${link.path}-${index}`}
-                    type="button"
-                    onClick={() => onNavigate({ path: link.path })}
-                  >
-                    {link.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {sourceLinks.length > 0 && (
-            <div>
-              <h3>规范原文链接</h3>
-              <div className="viewer-link-list">
-                {sourceLinks.map((link, index) => (
-                  <button
-                    className="viewer-link source-link"
-                    key={`${link.path}-${link.start_line ?? 'start'}-${index}`}
-                    type="button"
-                    onClick={() => onNavigate({
-                      path: link.path,
-                      startLine: link.start_line ?? undefined,
-                      endLine: link.end_line ?? undefined,
-                    })}
-                  >
-                    {link.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
-      )}
-      {data.kind === 'wiki' ? (
-        <pre className="content-pre wiki-content">{data.content}</pre>
-      ) : (
-        <div className="numbered-source" aria-label="规范原文行">
-          {sourceLines.map((line, index) => (
-            <div className="numbered-line" key={data.start_line + index}>
-              <span className="line-number" aria-hidden="true">{data.start_line + index}</span>
-              <span className="line-text">{line || ' '}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="numbered-source" aria-label="规范原文行">
+        {sourceLines.map((line, index) => (
+          <div className="numbered-line" key={data.start_line + index}>
+            <span className="line-number" aria-hidden="true">{data.start_line + index}</span>
+            <span className="line-text">{line || ' '}</span>
+          </div>
+        ))}
+      </div>
     </>
   )
 }

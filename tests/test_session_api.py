@@ -40,11 +40,12 @@ class SessionApiTests(unittest.TestCase):
 
         answered = self.client.post(
             f"/api/v1/conversations/{conversation_id}/messages",
-            json={"question": "ServerType", "retrieval_mode": "fts", "online": False},
+            json={"question": "ServerType", "online": False},
         )
         loaded = self.client.get(f"/api/v1/conversations/{conversation_id}")
 
         self.assertEqual(200, answered.status_code)
+        self.assertEqual("fts", answered.json()["retrieval_mode"])
         self.assertEqual(conversation_id, answered.json()["conversation_id"])
         self.assertEqual(2, len(loaded.json()["messages"]))
         self.assertEqual("user", loaded.json()["messages"][0]["role"])
@@ -62,9 +63,11 @@ class SessionApiTests(unittest.TestCase):
     def test_query_endpoint_can_create_and_persist_a_conversation(self) -> None:
         response = self.client.post(
             "/api/v1/rag/query",
-            json={"question": "ServerType", "retrieval_mode": "fts", "online": False},
+            json={"question": "ServerType", "online": False},
         )
 
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("fts", response.json()["retrieval_mode"])
         conversation_id = response.json()["conversation_id"]
         loaded = self.client.get(f"/api/v1/conversations/{conversation_id}")
         self.assertEqual(200, loaded.status_code)

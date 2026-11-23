@@ -3,27 +3,20 @@
 from __future__ import annotations
 
 import os
-import json
 from pathlib import Path
-from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .api import KnowledgeBase
-from .embeddings import EmbeddingError, SentenceTransformerEmbeddingProvider
-from .llm import LLMError, OpenAICompatibleChatModel
-from .rag import RAGPipeline
-from .retrieval import Part5Retriever
+from .rag import RAGPipeline, create_chat_model_from_env, create_retriever
 from .session_store import SessionStore
 from .source_view import SourceView, SourceViewError
-from .vector_index import VectorIndex
 
 
 class QueryRequest(BaseModel):
     question: str = Field(min_length=1)
-    retrieval_mode: Literal["auto", "hybrid", "fts"] = "auto"
     top_k: int = Field(default=6, ge=1, le=20)
     relationship_depth: int = Field(default=0, ge=0, le=3)
     online: bool = False
@@ -42,7 +35,7 @@ def create_app(root: str | Path | None = None) -> FastAPI:
     app.state.knowledge_base = KnowledgeBase(root_path)
     app.state.root = root_path
     app.state.source_view = SourceView(root_path, app.state.knowledge_base)
-    app.state.retrievers = {}
+    app.state.retriever = create_retriever(app.state.knowledge_base)
     app.state.sessions = SessionStore(
         os.getenv("SESSION_DB_PATH", str(root_path / "data" / "rag_sessions.sqlite3")),
         ttl_days=int(os.getenv("SESSION_TTL_DAYS", "30")),
@@ -200,8 +193,8 @@ def _cookie_samesite() -> str:
 
 
 def _execute_query(app: FastAPI, request: QueryRequest) -> dict[str, object]:
-    retriever = _get_retriever(app, request.retrieval_mode)
-    chat_model, model_error = _chat_model() if request.online else (None, None)
+    retriever = app.state.retriever
+    chat_model, model_error = create_chat_model_from_env() if request.online else (None, None)
     answer = RAGPipeline(retriever=retriever, chat_model=chat_model).ask(
         request.question,
         top_k=request.top_k,
@@ -210,7 +203,7 @@ def _execute_query(app: FastAPI, request: QueryRequest) -> dict[str, object]:
     result: dict[str, object] = {
         "answer": answer.answer,
         "mode": answer.mode,
-        "retrieval_mode": retriever.last_mode,
+        "retrieval_mode": retriever.mode,
         "citations": answer.citations,
         "retrieved": answer.retrieved,
         "error": answer.error or model_error,
@@ -263,58 +256,6 @@ def _persist_exchange(
 def _conversation_title(question: str) -> str:
     normalized = " ".join(question.split())
     return normalized[:60] or "New Part 5 conversation"
-
-
-def _get_retriever(app: FastAPI, mode: str) -> Part5Retriever:
-    cached = app.state.retrievers.get(mode)
-    if cached is not None:
-        return cached
-    knowledge_base = app.state.knowledge_base
-    if mode == "fts":
-        retriever = Part5Retriever(knowledge_base)
-    else:
-        retriever = _build_vector_retriever(app.state.root, knowledge_base)
-    app.state.retrievers[mode] = retriever
-    return retriever
-
-
-def _build_vector_retriever(root: Path, knowledge_base: KnowledgeBase) -> Part5Retriever:
-    vector_path = root / "indexes" / "embeddings.jsonl"
-    metadata_path = root / "indexes" / "embeddings.meta.json"
-    manifest_path = root / "source" / "source_manifest.json"
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        source_hash = manifest.get("sha256") if isinstance(manifest, dict) else None
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        source_hash = None
-    if not vector_path.exists() or not metadata_path.exists() or not isinstance(source_hash, str):
-        return Part5Retriever(knowledge_base)
-    try:
-        provider = SentenceTransformerEmbeddingProvider(
-            os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-        )
-    except EmbeddingError:
-        return Part5Retriever(knowledge_base)
-    return Part5Retriever(
-        knowledge_base,
-        vector_index=VectorIndex(root, source_hash=source_hash),
-        embedding_provider=provider,
-    )
-
-
-def _chat_model() -> tuple[OpenAICompatibleChatModel | None, str | None]:
-    try:
-        return (
-            OpenAICompatibleChatModel(
-                api_key=os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY"),
-                model=os.getenv("DEEPSEEK_MODEL") or os.getenv("OPENAI_MODEL", "deepseek-chat"),
-                base_url=os.getenv("DEEPSEEK_BASE_URL")
-                or os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com"),
-            ),
-            None,
-        )
-    except LLMError as exc:
-        return None, str(exc)
 
 
 app = create_app()
