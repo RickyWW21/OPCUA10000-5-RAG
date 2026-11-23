@@ -1,9 +1,4 @@
-"""Evaluate Part 5 retrieval against a versioned JSON query set.
-
-The default mode is FTS only. Hybrid evaluation uses the real local vector
-artifacts and the real local sentence-transformers provider, and refuses to
-report a query that fell back to FTS as a hybrid result.
-"""
+"""Evaluate Part 5 FTS5 retrieval against a versioned JSON query set."""
 
 from __future__ import annotations
 
@@ -19,15 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from opcua_kb import KnowledgeBase
-from opcua_kb.embeddings import EmbeddingError, SentenceTransformerEmbeddingProvider
-from opcua_kb.retrieval import Part5Retriever
-from opcua_kb.vector_index import VectorIndex, VectorIndexError
-
-
-class EvaluationError(RuntimeError):
-    """Raised when an evaluation cannot be performed honestly."""
-
+from opcua_kb.rag import create_retriever
 
 POSITIVE = "positive"
 DIAGNOSTIC_CATEGORIES = ("out_of_scope", "context_dependent")
@@ -39,45 +26,24 @@ def evaluate(
     fixture: str | Path,
     *,
     top_k: int = 3,
-    retrieval_mode: str = "fts",
-    embedding_model: str | None = None,
 ) -> dict[str, Any]:
-    """Run a retrieval baseline and return per-case and aggregate metrics.
-
-    ``retrieval_mode="fts"`` preserves the historical default. ``"hybrid"``
-    requires complete, source-hash-matched local vector artifacts and a local
-    embedding model; any missing/broken artifact or per-query fallback raises
-    :class:`EvaluationError` instead of mislabelling FTS results as hybrid.
-    """
+    """Run a retrieval baseline and return per-case and aggregate metrics."""
 
     top_k = _positive_int(top_k, "top_k", allow_zero=False)
-    if retrieval_mode not in {"fts", "hybrid"}:
-        raise ValueError("retrieval_mode must be 'fts' or 'hybrid'")
     cases, fixture_hash = _load_fixture(fixture, default_top_k=top_k)
-    retriever, retrieval_provenance = _build_retriever(
-        root, retrieval_mode, embedding_model
-    )
+    retriever = create_retriever(root)
+    retrieval_mode = "fts"
 
     results: list[dict[str, Any]] = []
     for case in cases:
         started = time.perf_counter()
-        try:
-            records = retriever.retrieve(
-                case["question"],
-                top_k=case["top_k"],
-                relationship_depth=case["relationship_depth"],
-            )
-        except (EmbeddingError, VectorIndexError) as exc:
-            raise EvaluationError(
-                f"{retrieval_mode} retrieval failed for question {case['question']!r}: {exc}"
-            ) from exc
+        records = retriever.retrieve(
+            case["question"],
+            top_k=case["top_k"],
+            relationship_depth=case["relationship_depth"],
+        )
         latency_ms = round((time.perf_counter() - started) * 1000.0, 3)
-        actual_mode = _mode_name(getattr(retriever, "last_mode", None))
-        if retrieval_mode == "hybrid" and actual_mode != "hybrid":
-            raise EvaluationError(
-                "strict hybrid evaluation refused a fallback: query "
-                f"{case['question']!r} ran in {actual_mode!r} mode"
-            )
+        actual_mode = _mode_name(getattr(retriever, "mode", None))
 
         retrieved_ids = [record.id for record in records]
         result = _case_result(case, retrieved_ids, latency_ms, retrieval_mode, actual_mode)
@@ -124,7 +90,13 @@ def evaluate(
                 },
             },
             "source": _source_provenance(root),
-            "retrieval": retrieval_provenance,
+            "retrieval": {
+                "requested_mode": retrieval_mode,
+                "parameters": {
+                    "top_k": top_k,
+                    "relationship_depth_default": 0,
+                },
+            },
             "metrics": {
                 "hit_at_1": "any expected id in the first retrieved record",
                 "hit_at_3": "any expected id in the first three retrieved records",
@@ -135,10 +107,6 @@ def evaluate(
                 "aggregates": "positive cases only; out_of_scope and context_dependent diagnostics are excluded",
             },
         },
-    }
-    report["provenance"]["retrieval"]["parameters"] = {
-        "top_k": top_k,
-        "relationship_depth_default": 0,
     }
     return report
 
@@ -232,106 +200,6 @@ def _positive_int(value: Any, name: str, *, allow_zero: bool) -> int:
     return value
 
 
-def _build_retriever(
-    root: str | Path, retrieval_mode: str, embedding_model: str | None
-) -> tuple[Part5Retriever, dict[str, Any]]:
-    knowledge_base = KnowledgeBase(root)
-    if retrieval_mode == "fts":
-        return Part5Retriever(knowledge_base), {
-            "requested_mode": "fts",
-            "embedding_model": None,
-            "vector_index": None,
-        }
-
-    root_path = Path(root)
-    manifest_path = root_path / "source" / "source_manifest.json"
-    source_hash = _required_source_hash(manifest_path)
-    vectors_path = root_path / "indexes" / "embeddings.jsonl"
-    metadata_path = root_path / "indexes" / "embeddings.meta.json"
-    missing = [str(path) for path in (vectors_path, metadata_path) if not path.exists()]
-    if missing:
-        raise EvaluationError(
-            "hybrid evaluation requires local vector artifacts; missing: "
-            + ", ".join(missing)
-        )
-    metadata = _read_vector_metadata(metadata_path)
-    if metadata.get("doc") != "OPC-10000-5":
-        raise EvaluationError("vector index is not an OPC UA 10000-5 index")
-    if metadata.get("source_hash") != source_hash:
-        raise EvaluationError(
-            "vector index source hash is stale: index "
-            f"{metadata.get('source_hash')!r} does not match manifest {source_hash!r}"
-        )
-    index_model = metadata.get("model_name")
-    if not isinstance(index_model, str) or not index_model.strip():
-        raise EvaluationError("vector index metadata has no embedding model name")
-    model_name = embedding_model or index_model
-    if model_name != index_model:
-        raise EvaluationError(
-            "embedding model does not match vector index metadata: "
-            f"requested {model_name!r}, index {index_model!r}"
-        )
-    dimension = metadata.get("dimension")
-    if isinstance(dimension, bool) or not isinstance(dimension, int) or dimension <= 0:
-        raise EvaluationError("vector index metadata has an invalid dimension")
-    try:
-        provider = SentenceTransformerEmbeddingProvider(model_name)
-    except EmbeddingError as exc:
-        raise EvaluationError(
-            f"unable to load local embedding model for hybrid evaluation: {model_name}"
-        ) from exc
-    if provider.dimension != dimension:
-        raise EvaluationError(
-            "embedding provider dimension does not match vector index metadata: "
-            f"provider {provider.dimension}, index {dimension}"
-        )
-    return (
-        Part5Retriever(
-            knowledge_base,
-            vector_index=VectorIndex(root_path, source_hash=source_hash),
-            embedding_provider=provider,
-        ),
-        {
-            "requested_mode": "hybrid",
-            "embedding_model": provider.model_name,
-            "vector_index": {
-                "path": str(vectors_path),
-                "metadata_path": str(metadata_path),
-                "source_hash": metadata["source_hash"],
-                "model_name": index_model,
-                "dimension": dimension,
-                "built_at": metadata.get("built_at"),
-            },
-        },
-    )
-
-
-def _required_source_hash(manifest_path: Path) -> str:
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise EvaluationError(
-            "hybrid evaluation requires a readable source manifest with sha256: "
-            f"{manifest_path}"
-        ) from exc
-    sha256 = manifest.get("sha256") if isinstance(manifest, dict) else None
-    if not isinstance(sha256, str) or not sha256.strip():
-        raise EvaluationError(
-            f"hybrid evaluation requires source manifest sha256: {manifest_path}"
-        )
-    return sha256
-
-
-def _read_vector_metadata(path: Path) -> dict[str, Any]:
-    try:
-        metadata = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise EvaluationError(f"unable to read vector metadata: {path}") from exc
-    if not isinstance(metadata, dict):
-        raise EvaluationError(f"vector metadata is invalid: {path}")
-    return metadata
-
-
 def _source_provenance(root: str | Path) -> dict[str, Any]:
     manifest_path = Path(root) / "source" / "source_manifest.json"
     try:
@@ -411,27 +279,14 @@ def main() -> None:
         help="JSON evaluation fixture.",
     )
     parser.add_argument("--top-k", type=int, default=3)
-    parser.add_argument(
-        "--retrieval-mode",
-        choices=("fts", "hybrid"),
-        default="fts",
-        help="Explicit retrieval mode; hybrid fails instead of falling back.",
-    )
-    parser.add_argument(
-        "--embedding-model",
-        default=None,
-        help="Local sentence-transformers model path; defaults to the index metadata model.",
-    )
     args = parser.parse_args()
     try:
         report = evaluate(
             args.root,
             args.fixture,
             top_k=args.top_k,
-            retrieval_mode=args.retrieval_mode,
-            embedding_model=args.embedding_model,
         )
-    except (EvaluationError, OSError, ValueError) as exc:
+    except (OSError, ValueError) as exc:
         print(f"错误: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
     print(json.dumps(report, ensure_ascii=False, indent=2))
