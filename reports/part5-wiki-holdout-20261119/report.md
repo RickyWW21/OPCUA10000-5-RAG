@@ -141,14 +141,18 @@ E1 来源 URL 实际覆盖 §7.17 L2198–2220，能打开全部正确正文，�
 
 评估目录保留 `protocol.md`、`preflight.jsonl`／元数据、直连失败批次、正式批次、`review.json`、`audit.json` 及旧题审计回归 `audit-old-regression.json`。离线预检同样为 32 条、293 项来源检查全部通过，未据此调整题目或系统。
 
-> **归档复核说明（FTS5 精简后）：** `tools/check_wiki_evaluation.py` 与 `tools/evaluate_wiki_rag.py` 已在 RAG 架构精简提交 `7883c5f` 中下线。Windows 下 `core.autocrlf=true` 会改写文本换行符并导致 SHA-256 校验失败；如需按本报告原样复核离线审计结果，请按以下步骤以 LF 检出快照 `4bc314d` 并还原评估时为 CRLF 的文件（以及主仓题集 LF 字节）：
+> **归档复核说明（FTS5 精简后）：** `tools/check_wiki_evaluation.py` 与 `tools/evaluate_wiki_rag.py` 已在 RAG 架构精简提交 `7883c5f` 中下线。Windows 下 `core.autocrlf=true` 会改写换行符导致 SHA-256 校验失败；如需完全在独立副本内复核（不修改主仓任何文件），请按以下步骤以 LF 检出快照 `4bc314d`，并在副本内还原评估时为 CRLF 的文件与本副本内题集路径：
 > ```powershell
 > git -c core.autocrlf=false worktree add .worktrees/wiki-eval-4bc314d 4bc314d
-> python -c "from pathlib import Path; p = Path('tests/fixtures/part5_wiki_holdout_20261119.json'); p.write_bytes(p.read_bytes().replace(b'\r\n', b'\n'))"
 > cd .worktrees/wiki-eval-4bc314d
-> python -c "from pathlib import Path
+> python -c "import json; from pathlib import Path
+> root = Path.cwd()
 > for rel in ('opcua_kb/__init__.py', 'opcua_kb/api.py', 'opcua_kb/llm.py', 'opcua_kb/retrieval.py', 'reports/part5-wiki-holdout-20261119/run-connected.jsonl'):
->     p = Path(rel); p.write_bytes(p.read_bytes().replace(b'\r\n', b'\n').replace(b'\n', b'\r\n'))"
+>     p = root / rel; p.write_bytes(p.read_bytes().replace(b'\r\n', b'\n').replace(b'\n', b'\r\n'))
+> mp = root / 'reports/part5-wiki-holdout-20261119/run-connected.meta.json'
+> meta = json.loads(mp.read_text(encoding='utf-8'))
+> meta['fixture']['path'] = str(root / 'tests/fixtures/part5_wiki_holdout_20261119.json')
+> mp.write_text(json.dumps(meta, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')"
 > ```
 > 再执行下方命令（复核完成后可 `cd ../..; git worktree remove --force .worktrees/wiki-eval-4bc314d` 清理）：
 

@@ -484,6 +484,69 @@ class SourceViewTests(unittest.TestCase):
         )
         self.assertEqual("spec", enriched["retrieved"][1]["source"]["kind"])
 
+    def test_legacy_wiki_hash_checks_actual_file_bytes_and_shares_rejection_across_retrieved_and_citations(
+        self,
+    ) -> None:
+        # Case 1: retrieved has mismatched hash, citation with same id only has matching version.
+        # Both must share the rejected verdict (no spec_path, empty locations).
+        shared_result = {
+            "answer": "ServerType [W1]",
+            "retrieved": [
+                {
+                    "label": "[W1]",
+                    "id": "wiki:servertype",
+                    "type": "wiki",
+                    "title": "ServerType",
+                    "source": {
+                        "kind": "wiki",
+                        "path": "wiki/entities/servertype.md",
+                        "version": "1.05.06",
+                        "source_sha256": "0" * 64,
+                        "locations": [{"section": "6.3.1", "start_line": 5, "end_line": 12}],
+                    },
+                }
+            ],
+            "citations": [
+                {
+                    "label": "[W1]",
+                    "id": "wiki:servertype",
+                    "title": "ServerType",
+                    "source": {
+                        "kind": "wiki",
+                        "path": "wiki/entities/servertype.md",
+                        "version": "1.05.06",
+                        "locations": [{"section": "6.3.1", "start_line": 5, "end_line": 12}],
+                    },
+                }
+            ],
+        }
+        enriched = self.sv.enrich_result(shared_result)
+        self.assertEqual([], enriched["retrieved"][0]["source"]["locations"])
+        self.assertNotIn("spec_path", enriched["retrieved"][0]["source"])
+        self.assertEqual([], enriched["citations"][0]["source"]["locations"])
+        self.assertNotIn("spec_path", enriched["citations"][0]["source"])
+
+        # Case 2: replace the Markdown file on disk while keeping the old manifest intact.
+        # Even a citation matching the old manifest's version & hash must be rejected.
+        self.source_path.write_text("tampered line 1\n" * 30, encoding="utf-8")
+        stale_manifest_citation = {
+            "label": "[W1]",
+            "id": "wiki:servertype",
+            "title": "ServerType",
+            "source": {
+                "kind": "wiki",
+                "path": "wiki/entities/servertype.md",
+                "version": "1.05.06",
+                "source_sha256": self.sha256,
+                "locations": [{"section": "6.3.1", "start_line": 5, "end_line": 12}],
+            },
+        }
+        tampered_source = self.sv.source_for_citation(stale_manifest_citation)
+        self.assertIsNotNone(tampered_source)
+        self.assertEqual("legacy_wiki", tampered_source["kind"])
+        self.assertEqual([], tampered_source["locations"])
+        self.assertNotIn("spec_path", tampered_source)
+
     def test_source_view_uses_no_private_kb_loaders(self) -> None:
         source_view_path = Path(__file__).resolve().parents[1] / "opcua_kb" / "source_view.py"
         source_text = source_view_path.read_text(encoding="utf-8")

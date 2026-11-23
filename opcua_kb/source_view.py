@@ -7,6 +7,7 @@ range that backs a citation without ever reading an arbitrary path.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 from typing import Any
@@ -85,15 +86,25 @@ class SourceView:
         """Attach a normalized ``source`` to retrieved items and citations."""
 
         sources_by_id: dict[str, dict[str, Any] | None] = {}
+        legacy_by_id: dict[str, tuple[dict[str, Any], bool]] = {}
         retrieved = result.get("retrieved")
         if isinstance(retrieved, list):
             for item in retrieved:
                 if not isinstance(item, dict):
                     continue
                 if _is_legacy_wiki_record(item):
-                    legacy = self._legacy_wiki_source(item)
+                    rec_id = str(item.get("id") or "")
+                    prev_source, prev_rejected = legacy_by_id.get(rec_id, (None, False)) if rec_id else (None, False)
+                    legacy, rejected = self._build_legacy_wiki_source(
+                        item, fallback=prev_source, fallback_rejected=prev_rejected
+                    )
+                    if rejected and isinstance(prev_source, dict):
+                        prev_source["locations"] = []
+                        prev_source.pop("spec_path", None)
                     item["source"] = legacy
-                    sources_by_id[str(item.get("id") or "")] = legacy
+                    sources_by_id[rec_id] = legacy
+                    if rec_id:
+                        legacy_by_id[rec_id] = (legacy, rejected or prev_rejected)
                     continue
                 try:
                     source = self.source_for_retrieved(item)
@@ -111,11 +122,17 @@ class SourceView:
                 if not isinstance(citation, dict):
                     continue
                 if _is_legacy_wiki_record(citation):
-                    existing = sources_by_id.get(str(citation.get("id") or ""))
-                    if isinstance(existing, dict) and existing.get("kind") == "legacy_wiki":
-                        citation["source"] = self._legacy_wiki_source(citation, fallback=existing)
-                    else:
-                        citation["source"] = self._legacy_wiki_source(citation)
+                    rec_id = str(citation.get("id") or "")
+                    existing, existing_rejected = legacy_by_id.get(rec_id, (None, False)) if rec_id else (None, False)
+                    legacy, rejected = self._build_legacy_wiki_source(
+                        citation, fallback=existing, fallback_rejected=existing_rejected
+                    )
+                    if rejected and isinstance(existing, dict):
+                        existing["locations"] = []
+                        existing.pop("spec_path", None)
+                        if rec_id:
+                            legacy_by_id[rec_id] = (existing, True)
+                    citation["source"] = legacy
                     continue
                 try:
                     source = sources_by_id.get(str(citation.get("id") or ""))
@@ -509,7 +526,9 @@ class SourceView:
             resolved = source_path.resolve()
             resolved.relative_to(source_dir)
             resolved.relative_to(self.root)
-            lines = resolved.read_text(encoding="utf-8").splitlines()
+            raw_bytes = resolved.read_bytes()
+            actual_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+            lines = raw_bytes.decode("utf-8").splitlines()
         except (OSError, UnicodeDecodeError, ValueError):
             return None
         sha256 = data.get("sha256")
@@ -517,6 +536,8 @@ class SourceView:
         return {
             "version": version,
             "sha256": sha256,
+            "actual_sha256": actual_sha256,
+            "file_matches_manifest": (not sha256) or (actual_sha256.lower() == sha256.lower()),
             "title": title or filename,
             "path": resolved.relative_to(self.root).as_posix(),
             "lines": lines,
@@ -591,6 +612,18 @@ class SourceView:
     ) -> dict[str, Any]:
         """Build a read-only historical marker for retired Wiki citations."""
 
+        payload, _ = self._build_legacy_wiki_source(record, fallback=fallback)
+        return payload
+
+    def _build_legacy_wiki_source(
+        self,
+        record: dict[str, Any],
+        *,
+        fallback: dict[str, Any] | None = None,
+        fallback_rejected: bool = False,
+    ) -> tuple[dict[str, Any], bool]:
+        """Build a read-only historical marker and return ``(payload, rejected)``."""
+
         source = record.get("source") if isinstance(record.get("source"), dict) else {}
         provenance = record.get("provenance") if isinstance(record.get("provenance"), dict) else {}
         wiki_path = ""
@@ -605,13 +638,15 @@ class SourceView:
 
         spec_path = ""
         manifest_version = ""
-        manifest_sha256 = ""
+        actual_sha256 = ""
+        file_matches_manifest = False
         total_lines = 0
         manifest = self._manifest()
         if isinstance(manifest, dict):
             spec_path = str(manifest.get("path") or "")
             manifest_version = str(manifest.get("version") or "")
-            manifest_sha256 = str(manifest.get("sha256") or "")
+            actual_sha256 = str(manifest.get("actual_sha256") or "")
+            file_matches_manifest = bool(manifest.get("file_matches_manifest"))
             lines = manifest.get("lines")
             if isinstance(lines, list):
                 total_lines = len(lines)
@@ -642,8 +677,9 @@ class SourceView:
         has_version = bool(version)
         has_sha = bool(legacy_sha256)
         version_ok = (not has_version) or (bool(manifest_version) and version == manifest_version)
-        sha_ok = (not has_sha) or (bool(manifest_sha256) and legacy_sha256.lower() == manifest_sha256.lower())
-        source_matches = (has_version or has_sha) and version_ok and sha_ok
+        sha_ok = (not has_sha) or (bool(actual_sha256) and legacy_sha256.lower() == actual_sha256.lower())
+        rejected = fallback_rejected or not file_matches_manifest or not version_ok or not sha_ok
+        source_matches = (not rejected) and (has_version or has_sha)
 
         raw_locations: list[Any] = []
         if isinstance(source.get("locations"), list):
@@ -693,7 +729,7 @@ class SourceView:
         }
         if locations and spec_path:
             payload["spec_path"] = spec_path
-        return payload
+        return payload, rejected
 
     def _relationships(self) -> list[Any]:
         records = self._call_kb("all_relationships")
