@@ -14,6 +14,7 @@ type EvidenceSource = {
   version: string
   status?: string
   spec_path?: string
+  spec_sha256?: string
   locations: SourceLocation[]
   url?: string
 }
@@ -66,7 +67,7 @@ type ContentResponse = {
   content: string
   locations: SourceLocation[]
 }
-type OpenTarget = { path: string; startLine?: number; endLine?: number }
+type OpenTarget = { path: string; startLine?: number; endLine?: number; sha256?: string }
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -95,6 +96,7 @@ function contentRequestUrl(target: OpenTarget): string {
   const params = new URLSearchParams({ path: target.path })
   if (target.startLine !== undefined) params.set('start_line', String(target.startLine))
   if (target.endLine !== undefined) params.set('end_line', String(target.endLine))
+  if (target.sha256) params.set('sha256', target.sha256)
   return `${apiBase}/api/v1/content?${params.toString()}`
 }
 
@@ -296,7 +298,8 @@ function App() {
   function openSource(source: EvidenceSource, location?: SourceLocation) {
     const selected = location ?? source.locations[0]
     const targetPath = source.kind === 'legacy_wiki' ? source.spec_path : source.path
-    if (!targetPath || !selected) {
+    const targetSha256 = source.kind === 'legacy_wiki' ? source.spec_sha256 : undefined
+    if (!targetPath || !selected || (source.kind === 'legacy_wiki' && !targetSha256)) {
       if (source.kind !== 'legacy_wiki') {
         setError('该来源没有可验证的行号，无法打开规范原文。')
       }
@@ -306,6 +309,7 @@ function App() {
       path: targetPath,
       startLine: selected.start_line,
       endLine: selected.end_line,
+      sha256: targetSha256,
     })
   }
 
@@ -604,7 +608,7 @@ function SourceMeta({
   compact?: boolean
 }) {
   const locations = source.locations
-  const canOpenSpec = source.kind === 'spec' || Boolean(source.spec_path)
+  const canOpenSpec = source.kind === 'spec' || Boolean(source.spec_path && source.spec_sha256)
   return (
     <div className={compact ? 'source-meta compact' : 'source-meta'}>
       <div className="source-meta-row">

@@ -142,10 +142,11 @@ def create_app(root: str | Path | None = None) -> FastAPI:
         path: str = Query(min_length=1, max_length=512),
         start_line: int | None = Query(default=None, ge=1),
         end_line: int | None = Query(default=None, ge=1),
+        sha256: str | None = Query(default=None, min_length=1, max_length=128),
     ) -> dict[str, object]:
         try:
             return app.state.source_view.content(
-                path, start_line=start_line, end_line=end_line
+                path, start_line=start_line, end_line=end_line, sha256=sha256
             )
         except SourceViewError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc

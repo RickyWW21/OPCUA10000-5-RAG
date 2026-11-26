@@ -546,6 +546,253 @@ class SourceViewTests(unittest.TestCase):
         self.assertEqual("legacy_wiki", tampered_source["kind"])
         self.assertEqual([], tampered_source["locations"])
         self.assertNotIn("spec_path", tampered_source)
+        self.assertNotIn("spec_sha256", tampered_source)
+
+    def test_legacy_wiki_group_duplicate_citations_mismatches_both_orders(self) -> None:
+        def make_matching_record(label: str) -> dict[str, object]:
+            return {
+                "label": label,
+                "id": "wiki:servertype",
+                "title": "ServerType",
+                "source": {
+                    "kind": "wiki",
+                    "path": "wiki/entities/servertype.md",
+                    "version": "1.05.06",
+                    "locations": [{"section": "6.3.1", "table": "9", "start_line": 6, "end_line": 12}],
+                },
+            }
+
+        def make_bad_hash_record(label: str) -> dict[str, object]:
+            return {
+                "label": label,
+                "id": "wiki:servertype",
+                "title": "ServerType",
+                "source": {
+                    "kind": "wiki",
+                    "path": "wiki/entities/servertype.md",
+                    "version": "1.05.06",
+                    "source_sha256": "0" * 64,
+                    "locations": [{"section": "6.3.1", "table": "9", "start_line": 6, "end_line": 12}],
+                },
+            }
+
+        def make_bad_version_record(label: str) -> dict[str, object]:
+            return {
+                "label": label,
+                "id": "wiki:servertype",
+                "title": "ServerType",
+                "provenance": {
+                    "path": "wiki/entities/servertype.md",
+                    "source_version": "1.05.05",
+                    "sources": [{"section": "6.3.1", "lines": "6-12"}],
+                },
+            }
+
+        for order_name, citation_pair in (
+            ("matching_first_bad_hash_second", [make_matching_record("[W1]"), make_bad_hash_record("[W2]")]),
+            ("bad_hash_first_matching_second", [make_bad_hash_record("[W1]"), make_matching_record("[W2]")]),
+            ("matching_first_bad_version_second", [make_matching_record("[W1]"), make_bad_version_record("[W2]")]),
+            ("bad_version_first_matching_second", [make_bad_version_record("[W1]"), make_matching_record("[W2]")]),
+        ):
+            with self.subTest(order=order_name):
+                result = {
+                    "retrieved": [
+                        {
+                            **make_matching_record("[W1]"),
+                            "type": "wiki",
+                        }
+                    ],
+                    "citations": citation_pair,
+                }
+                enriched = self.sv.enrich_result(result)
+                all_sources = [enriched["retrieved"][0]["source"]] + [
+                    c["source"] for c in enriched["citations"]
+                ]
+                for src in all_sources:
+                    self.assertEqual("legacy_wiki", src["kind"])
+                    self.assertEqual("draft", src["status"])
+                    self.assertEqual([], src["locations"])
+                    self.assertNotIn("spec_path", src)
+                    self.assertNotIn("spec_sha256", src)
+
+    def test_legacy_wiki_group_complementary_metadata_both_orders_and_missing_id_isolation(
+        self,
+    ) -> None:
+        expected_locations = [{"section": "6.3.1", "table": "9", "start_line": 6, "end_line": 12}]
+
+        # Case 1: retrieved has version/path only, citation has valid line range (and vice versa).
+        for case_name, retrieved_item, citation_item in (
+            (
+                "citation_has_range",
+                {
+                    "label": "[W1]",
+                    "id": "wiki:servertype",
+                    "type": "wiki",
+                    "title": "ServerType",
+                    "source": {
+                        "kind": "wiki",
+                        "path": "wiki/entities/servertype.md",
+                        "version": "1.05.06",
+                    },
+                },
+                {
+                    "label": "[W1]",
+                    "id": "wiki:servertype",
+                    "title": "ServerType",
+                    "provenance": {
+                        "path": "wiki/entities/servertype.md",
+                        "sources": [{"section": "6.3.1", "table": "9", "lines": "6-12"}],
+                    },
+                },
+            ),
+            (
+                "retrieved_has_range",
+                {
+                    "label": "[W1]",
+                    "id": "wiki:servertype",
+                    "type": "wiki",
+                    "title": "ServerType",
+                    "source": {
+                        "kind": "wiki",
+                        "path": "wiki/entities/servertype.md",
+                        "locations": [{"section": "6.3.1", "table": "9", "start_line": 6, "end_line": 12}],
+                    },
+                },
+                {
+                    "label": "[W1]",
+                    "id": "wiki:servertype",
+                    "title": "ServerType",
+                    "source": {
+                        "kind": "wiki",
+                        "version": "1.05.06",
+                        "source_sha256": self.sha256,
+                    },
+                },
+            ),
+        ):
+            with self.subTest(case=case_name):
+                enriched = self.sv.enrich_result(
+                    {"retrieved": [retrieved_item], "citations": [citation_item]}
+                )
+                for src in (enriched["retrieved"][0]["source"], enriched["citations"][0]["source"]):
+                    self.assertEqual("legacy_wiki", src["kind"])
+                    self.assertEqual("draft", src["status"])
+                    self.assertEqual("wiki/entities/servertype.md", src["path"])
+                    self.assertEqual("1.05.06", src["version"])
+                    self.assertEqual("source/OPC-10000-5-v1.05.06.md", src["spec_path"])
+                    self.assertEqual(self.sha256, src["spec_sha256"])
+                    self.assertEqual(expected_locations, src["locations"])
+
+        # Case 2: duplicate citations with complementary metadata in both orders.
+        cit_meta_only = {
+            "label": "[W1]",
+            "id": "wiki:servertype",
+            "title": "ServerType",
+            "source": {
+                "kind": "wiki",
+                "path": "wiki/entities/servertype.md",
+                "version": "1.05.06",
+            },
+        }
+        cit_range_only = {
+            "label": "[W2]",
+            "id": "wiki:servertype",
+            "title": "ServerType",
+            "source": {
+                "kind": "wiki",
+                "locations": [{"section": "6.3.1", "table": "9", "start_line": 6, "end_line": 12}],
+            },
+        }
+        first_order = self.sv.enrich_result(
+            {"retrieved": [], "citations": [dict(cit_meta_only), dict(cit_range_only)]}
+        )
+        second_order = self.sv.enrich_result(
+            {"retrieved": [], "citations": [dict(cit_range_only), dict(cit_meta_only)]}
+        )
+        self.assertEqual(first_order["citations"][0]["source"], first_order["citations"][1]["source"])
+        self.assertEqual(second_order["citations"][0]["source"], second_order["citations"][1]["source"])
+        self.assertEqual(first_order["citations"][0]["source"], second_order["citations"][0]["source"])
+        self.assertEqual(self.sha256, first_order["citations"][0]["source"]["spec_sha256"])
+        self.assertEqual(expected_locations, first_order["citations"][0]["source"]["locations"])
+
+        # Case 3: missing/empty ids must never be grouped together.
+        missing_id_result = {
+            "retrieved": [
+                {
+                    "label": "[W1]",
+                    "id": "",
+                    "type": "wiki",
+                    "title": "No ID version only",
+                    "source": {
+                        "kind": "wiki",
+                        "path": "wiki/entities/a.md",
+                        "version": "1.05.06",
+                    },
+                }
+            ],
+            "citations": [
+                {
+                    "label": "[W1]",
+                    "title": "No ID valid",
+                    "source": {
+                        "kind": "wiki",
+                        "path": "wiki/entities/valid.md",
+                        "version": "1.05.06",
+                        "locations": [{"section": "6.3.1", "table": "9", "start_line": 6, "end_line": 12}],
+                    },
+                },
+                {
+                    "label": "[W2]",
+                    "id": "",
+                    "title": "No ID mismatched",
+                    "source": {
+                        "kind": "wiki",
+                        "path": "wiki/entities/bad.md",
+                        "version": "1.05.06",
+                        "source_sha256": "0" * 64,
+                        "locations": [{"section": "6.3.1", "table": "9", "start_line": 6, "end_line": 12}],
+                    },
+                },
+                {
+                    "label": "[W3]",
+                    "id": "   ",
+                    "title": "No ID range only",
+                    "source": {
+                        "kind": "wiki",
+                        "path": "wiki/entities/a.md",
+                        "locations": [{"section": "6.3.1", "table": "9", "start_line": 6, "end_line": 12}],
+                    },
+                },
+            ],
+        }
+        missing_enriched = self.sv.enrich_result(missing_id_result)
+        valid_src = missing_enriched["citations"][0]["source"]
+        bad_src = missing_enriched["citations"][1]["source"]
+        range_only_src = missing_enriched["citations"][2]["source"]
+        version_only_src = missing_enriched["retrieved"][0]["source"]
+
+        self.assertEqual("source/OPC-10000-5-v1.05.06.md", valid_src["spec_path"])
+        self.assertEqual(self.sha256, valid_src["spec_sha256"])
+        self.assertEqual(expected_locations, valid_src["locations"])
+        for disabled in (bad_src, range_only_src, version_only_src):
+            self.assertEqual([], disabled["locations"])
+            self.assertNotIn("spec_path", disabled)
+            self.assertNotIn("spec_sha256", disabled)
+
+    def test_content_verifies_optional_sha256_binding(self) -> None:
+        path = "source/OPC-10000-5-v1.05.06.md"
+        bound = self.sv.content(path, start_line=6, end_line=12, sha256=self.sha256)
+        self.assertEqual("\n".join(SOURCE_LINES[5:12]), bound["content"])
+
+        replaced_lines = [f"replaced line {number}" for number in range(1, 31)]
+        self.source_path.write_text("\n".join(replaced_lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(SourceViewError) as ctx:
+            self.sv.content(path, start_line=6, end_line=12, sha256=self.sha256)
+        self.assertEqual(409, ctx.exception.status_code)
+
+        unbound = self.sv.content(path, start_line=6, end_line=12)
+        self.assertEqual("\n".join(replaced_lines[5:12]), unbound["content"])
 
     def test_source_view_uses_no_private_kb_loaders(self) -> None:
         source_view_path = Path(__file__).resolve().parents[1] / "opcua_kb" / "source_view.py"

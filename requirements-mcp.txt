@@ -1,0 +1,2 @@
+-r requirements-api.txt
+mcp>=1.28,<2

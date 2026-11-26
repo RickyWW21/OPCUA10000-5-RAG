@@ -20,6 +20,7 @@ _SECTION = re.compile(r"^(?:\d+(?:\.\d+)*|Annex [A-Z]|[A-Z](?:\.\d+)+)$")
 _TABLE = re.compile(r"^(?:\d+|[A-Z]\.\d+)$")
 _LINES = re.compile(r"^(\d+)-(\d+)$")
 _WIKI_LABEL = re.compile(r"^\[W\d*\]$", re.IGNORECASE)
+_UNSET: Any = object()
 
 
 class SourceViewError(Exception):
@@ -47,6 +48,7 @@ class SourceView:
         *,
         start_line: int | None = None,
         end_line: int | None = None,
+        sha256: str | None = None,
     ) -> dict[str, Any]:
         """Return an exact specification line range."""
 
@@ -58,6 +60,13 @@ class SourceView:
             raise SourceViewError(404, "source manifest not available")
         if not isinstance(path, str) or path != manifest["path"]:
             raise SourceViewError(404, "source path not allowed")
+        if sha256 is not None:
+            expected_sha256 = sha256.strip().lower() if isinstance(sha256, str) else ""
+            if not expected_sha256:
+                raise SourceViewError(422, "invalid sha256")
+            actual_sha256 = str(manifest.get("actual_sha256") or "").lower()
+            if not actual_sha256 or expected_sha256 != actual_sha256:
+                raise SourceViewError(409, "source file fingerprint mismatch")
         if start_line is None or end_line is None:
             raise SourceViewError(422, "start_line and end_line are required for specification sources")
         if start_line < 1 or end_line < start_line:
@@ -86,25 +95,51 @@ class SourceView:
         """Attach a normalized ``source`` to retrieved items and citations."""
 
         sources_by_id: dict[str, dict[str, Any] | None] = {}
-        legacy_by_id: dict[str, tuple[dict[str, Any], bool]] = {}
         retrieved = result.get("retrieved")
+        citations = result.get("citations")
+
+        grouped_legacy: dict[str, list[dict[str, Any]]] = {}
+        ungrouped_legacy: list[dict[str, Any]] = []
+        for collection in (retrieved, citations):
+            if not isinstance(collection, list):
+                continue
+            for record in collection:
+                if not isinstance(record, dict) or not _is_legacy_wiki_record(record):
+                    continue
+                rec_id = _legacy_group_id(record)
+                if rec_id:
+                    grouped_legacy.setdefault(rec_id, []).append(record)
+                else:
+                    ungrouped_legacy.append(record)
+
+        resolved_legacy_groups: dict[str, dict[str, Any]] = {}
+        resolved_ungrouped: dict[int, dict[str, Any]] = {}
+        if grouped_legacy or ungrouped_legacy:
+            manifest = self._manifest()
+            for rec_id, records in grouped_legacy.items():
+                resolved_legacy_groups[rec_id] = self._resolve_legacy_wiki_group(
+                    records, manifest=manifest
+                )
+            for record in ungrouped_legacy:
+                resolved_ungrouped[id(record)] = self._resolve_legacy_wiki_group(
+                    [record], manifest=manifest
+                )
+
         if isinstance(retrieved, list):
             for item in retrieved:
                 if not isinstance(item, dict):
                     continue
                 if _is_legacy_wiki_record(item):
-                    rec_id = str(item.get("id") or "")
-                    prev_source, prev_rejected = legacy_by_id.get(rec_id, (None, False)) if rec_id else (None, False)
-                    legacy, rejected = self._build_legacy_wiki_source(
-                        item, fallback=prev_source, fallback_rejected=prev_rejected
+                    rec_id = _legacy_group_id(item)
+                    resolved = (
+                        resolved_legacy_groups[rec_id]
+                        if rec_id
+                        else resolved_ungrouped[id(item)]
                     )
-                    if rejected and isinstance(prev_source, dict):
-                        prev_source["locations"] = []
-                        prev_source.pop("spec_path", None)
+                    legacy = _copy_legacy_source(resolved)
                     item["source"] = legacy
-                    sources_by_id[rec_id] = legacy
                     if rec_id:
-                        legacy_by_id[rec_id] = (legacy, rejected or prev_rejected)
+                        sources_by_id[rec_id] = legacy
                     continue
                 try:
                     source = self.source_for_retrieved(item)
@@ -116,23 +151,18 @@ class SourceView:
                 else:
                     sources_by_id.setdefault(str(item.get("id") or ""), None)
 
-        citations = result.get("citations")
         if isinstance(citations, list):
             for citation in citations:
                 if not isinstance(citation, dict):
                     continue
                 if _is_legacy_wiki_record(citation):
-                    rec_id = str(citation.get("id") or "")
-                    existing, existing_rejected = legacy_by_id.get(rec_id, (None, False)) if rec_id else (None, False)
-                    legacy, rejected = self._build_legacy_wiki_source(
-                        citation, fallback=existing, fallback_rejected=existing_rejected
+                    rec_id = _legacy_group_id(citation)
+                    resolved = (
+                        resolved_legacy_groups[rec_id]
+                        if rec_id
+                        else resolved_ungrouped[id(citation)]
                     )
-                    if rejected and isinstance(existing, dict):
-                        existing["locations"] = []
-                        existing.pop("spec_path", None)
-                        if rec_id:
-                            legacy_by_id[rec_id] = (existing, True)
-                    citation["source"] = legacy
+                    citation["source"] = _copy_legacy_source(resolved)
                     continue
                 try:
                     source = sources_by_id.get(str(citation.get("id") or ""))
@@ -612,36 +642,27 @@ class SourceView:
     ) -> dict[str, Any]:
         """Build a read-only historical marker for retired Wiki citations."""
 
-        payload, _ = self._build_legacy_wiki_source(record, fallback=fallback)
-        return payload
+        records = [record]
+        if isinstance(fallback, dict):
+            records.append({"source": fallback})
+        return self._resolve_legacy_wiki_group(records)
 
-    def _build_legacy_wiki_source(
+    def _resolve_legacy_wiki_group(
         self,
-        record: dict[str, Any],
+        records: list[dict[str, Any]],
         *,
-        fallback: dict[str, Any] | None = None,
-        fallback_rejected: bool = False,
-    ) -> tuple[dict[str, Any], bool]:
-        """Build a read-only historical marker and return ``(payload, rejected)``."""
+        manifest: Any = _UNSET,
+    ) -> dict[str, Any]:
+        """Resolve all occurrences of one legacy Wiki record before exposing links."""
 
-        source = record.get("source") if isinstance(record.get("source"), dict) else {}
-        provenance = record.get("provenance") if isinstance(record.get("provenance"), dict) else {}
-        wiki_path = ""
-        for candidate in (
-            source.get("path"),
-            provenance.get("path"),
-            fallback.get("path") if isinstance(fallback, dict) else None,
-        ):
-            if isinstance(candidate, str) and candidate.strip():
-                wiki_path = candidate.strip().replace("\\", "/")
-                break
+        if manifest is _UNSET:
+            manifest = self._manifest()
 
         spec_path = ""
         manifest_version = ""
         actual_sha256 = ""
         file_matches_manifest = False
         total_lines = 0
-        manifest = self._manifest()
         if isinstance(manifest, dict):
             spec_path = str(manifest.get("path") or "")
             manifest_version = str(manifest.get("version") or "")
@@ -651,43 +672,62 @@ class SourceView:
             if isinstance(lines, list):
                 total_lines = len(lines)
 
-        version = ""
-        for candidate in (
-            source.get("version"),
-            provenance.get("source_version"),
-            provenance.get("version"),
-            fallback.get("version") if isinstance(fallback, dict) else None,
-        ):
-            if isinstance(candidate, str) and candidate.strip():
-                version = candidate.strip()
-                break
+        paths: set[str] = set()
+        explicit_versions: set[str] = set()
+        explicit_shas: set[str] = set()
+        raw_locations: list[Any] = []
 
-        legacy_sha256 = ""
-        for candidate in (
-            source.get("source_sha256"),
-            source.get("sha256"),
-            provenance.get("source_sha256"),
-            provenance.get("sha256"),
-            fallback.get("source_sha256") if isinstance(fallback, dict) else None,
-        ):
-            if isinstance(candidate, str) and candidate.strip():
-                legacy_sha256 = candidate.strip()
-                break
+        for record in records:
+            source = record.get("source") if isinstance(record.get("source"), dict) else {}
+            provenance = (
+                record.get("provenance") if isinstance(record.get("provenance"), dict) else {}
+            )
+            for candidate in (source.get("path"), provenance.get("path")):
+                if isinstance(candidate, str) and candidate.strip():
+                    paths.add(candidate.strip().replace("\\", "/"))
+            for candidate in (
+                source.get("version"),
+                provenance.get("source_version"),
+                provenance.get("version"),
+            ):
+                if isinstance(candidate, str) and candidate.strip():
+                    explicit_versions.add(candidate.strip())
+            for candidate in (
+                source.get("spec_sha256"),
+                source.get("source_sha256"),
+                source.get("sha256"),
+                provenance.get("source_sha256"),
+                provenance.get("sha256"),
+            ):
+                if isinstance(candidate, str) and candidate.strip():
+                    explicit_shas.add(candidate.strip())
+            if isinstance(source.get("locations"), list):
+                raw_locations.extend(source["locations"])
+            if isinstance(provenance.get("sources"), list):
+                raw_locations.extend(provenance["sources"])
 
-        has_version = bool(version)
-        has_sha = bool(legacy_sha256)
-        version_ok = (not has_version) or (bool(manifest_version) and version == manifest_version)
-        sha_ok = (not has_sha) or (bool(actual_sha256) and legacy_sha256.lower() == actual_sha256.lower())
-        rejected = fallback_rejected or not file_matches_manifest or not version_ok or not sha_ok
+        wiki_path = sorted(paths)[0] if paths else ""
+        has_version = bool(explicit_versions)
+        has_sha = bool(explicit_shas)
+        mismatched_versions = [
+            candidate
+            for candidate in sorted(explicit_versions)
+            if not manifest_version or candidate != manifest_version
+        ]
+        version_ok = not mismatched_versions
+        sha_ok = all(
+            bool(actual_sha256) and candidate.lower() == actual_sha256.lower()
+            for candidate in explicit_shas
+        )
+        rejected = (not file_matches_manifest) or (not version_ok) or (not sha_ok)
         source_matches = (not rejected) and (has_version or has_sha)
 
-        raw_locations: list[Any] = []
-        if isinstance(source.get("locations"), list):
-            raw_locations.extend(source["locations"])
-        if not raw_locations and isinstance(provenance.get("sources"), list):
-            raw_locations.extend(provenance["sources"])
-        if not raw_locations and isinstance(fallback, dict) and isinstance(fallback.get("locations"), list):
-            raw_locations.extend(fallback["locations"])
+        if mismatched_versions:
+            version = mismatched_versions[0]
+        elif explicit_versions:
+            version = sorted(explicit_versions)[0]
+        else:
+            version = ""
 
         locations: list[dict[str, Any]] = []
         seen: set[tuple[str | None, str | None, int, int]] = set()
@@ -719,6 +759,14 @@ class SourceView:
                 if table:
                     loc["table"] = table
                 locations.append(loc)
+            locations.sort(
+                key=lambda loc: (
+                    loc["start_line"],
+                    loc["end_line"],
+                    loc.get("section") or "",
+                    loc.get("table") or "",
+                )
+            )
 
         payload: dict[str, Any] = {
             "kind": "legacy_wiki",
@@ -727,13 +775,27 @@ class SourceView:
             "status": "draft",
             "locations": locations,
         }
-        if locations and spec_path:
+        if locations and spec_path and actual_sha256:
             payload["spec_path"] = spec_path
-        return payload, rejected
+            payload["spec_sha256"] = actual_sha256
+        return payload
 
     def _relationships(self) -> list[Any]:
         records = self._call_kb("all_relationships")
         return records if isinstance(records, list) else []
+
+
+def _legacy_group_id(record: dict[str, Any]) -> str:
+    raw_id = record.get("id")
+    if raw_id is None:
+        return ""
+    return str(raw_id).strip()
+
+
+def _copy_legacy_source(source: dict[str, Any]) -> dict[str, Any]:
+    copied = dict(source)
+    copied["locations"] = [dict(loc) for loc in source.get("locations") or []]
+    return copied
 
 
 def _is_legacy_wiki_record(record: dict[str, Any]) -> bool:

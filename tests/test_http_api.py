@@ -142,6 +142,109 @@ class HttpApiTests(unittest.TestCase):
         )
         self.assertEqual(404, wiki_response.status_code)
 
+    def test_content_bound_sha256_rejects_stale_source_and_keeps_unbound_compatibility(self) -> None:
+        original_lines = [f"Original spec line {number}" for number in range(1, 41)]
+        source_path = self.root / "source" / "OPC-10000-5-v1.05.06.md"
+        source_path.write_text("\n".join(original_lines) + "\n", encoding="utf-8")
+        original_sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
+        manifest_path = self.root / "source" / "source_manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "doc": "OPC-10000-5",
+                    "version": "1.05.06",
+                    "sha256": original_sha256,
+                    "local_source_path": "source/OPC-10000-5-v1.05.06.md",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        created = self.client.post("/api/v1/conversations", json={"title": "Bound legacy wiki"})
+        self.assertIn(created.status_code, (200, 201))
+        conversation_id = created.json()["id"]
+        session_id, _, _ = self.app.state.sessions.get_or_create_session(
+            self.client.cookies["rag_session"]
+        )
+        self.app.state.sessions.append_message(
+            session_id,
+            conversation_id,
+            role="assistant",
+            content="Historical note [W1].",
+            mode="offline",
+            retrieval_mode="fts",
+            citations=[
+                {
+                    "label": "[W1]",
+                    "title": "ServerType Wiki",
+                    "id": "wiki:servertype",
+                    "source": {
+                        "kind": "wiki",
+                        "path": "wiki/entities/servertype.md",
+                        "version": "1.05.06",
+                        "locations": [{"section": "6.3.1", "start_line": 6, "end_line": 12}],
+                    },
+                }
+            ],
+            retrieved=[],
+        )
+
+        loaded = self.client.get(f"/api/v1/conversations/{conversation_id}")
+        self.assertEqual(200, loaded.status_code)
+        legacy_source = loaded.json()["messages"][-1]["citations"][0]["source"]
+        self.assertEqual("source/OPC-10000-5-v1.05.06.md", legacy_source["spec_path"])
+        self.assertEqual(original_sha256, legacy_source["spec_sha256"])
+
+        valid_bound = self.client.get(
+            "/api/v1/content",
+            params={
+                "path": legacy_source["spec_path"],
+                "start_line": 6,
+                "end_line": 12,
+                "sha256": legacy_source["spec_sha256"],
+            },
+        )
+        self.assertEqual(200, valid_bound.status_code)
+        self.assertEqual("\n".join(original_lines[5:12]), valid_bound.json()["content"])
+
+        replaced_lines = [f"Replaced spec line {number}" for number in range(1, 41)]
+        source_path.write_text("\n".join(replaced_lines) + "\n", encoding="utf-8")
+        replaced_sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "doc": "OPC-10000-5",
+                    "version": "1.05.06",
+                    "sha256": replaced_sha256,
+                    "local_source_path": "source/OPC-10000-5-v1.05.06.md",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        stale_bound = self.client.get(
+            "/api/v1/content",
+            params={
+                "path": legacy_source["spec_path"],
+                "start_line": 6,
+                "end_line": 12,
+                "sha256": legacy_source["spec_sha256"],
+            },
+        )
+        self.assertEqual(409, stale_bound.status_code)
+        self.assertNotIn("Replaced spec line", stale_bound.text)
+
+        unbound = self.client.get(
+            "/api/v1/content",
+            params={
+                "path": legacy_source["spec_path"],
+                "start_line": 6,
+                "end_line": 12,
+            },
+        )
+        self.assertEqual(200, unbound.status_code)
+        self.assertEqual("\n".join(replaced_lines[5:12]), unbound.json()["content"])
+
     def test_get_conversation_handles_legacy_wiki_messages(self) -> None:
         created = self.client.post("/api/v1/conversations", json={"title": "Legacy wiki"})
         self.assertEqual(201 if created.status_code == 201 else 200, created.status_code)
