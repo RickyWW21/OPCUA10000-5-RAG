@@ -82,10 +82,15 @@ class ErrorBoundaryTests(unittest.TestCase):
                 ]
                 self.assertEqual(1, len(calls))
                 self.assertIsInstance(calls[0].func, ast.Attribute)
-                self.assertIsInstance(calls[0].func.value, ast.Attribute)
-                self.assertIsInstance(calls[0].func.value.value, ast.Name)
-                self.assertEqual("self", calls[0].func.value.value.id)
-                self.assertEqual("kb", calls[0].func.value.attr)
+                if handler == "_search":
+                    self.assertIsInstance(calls[0].func.value, ast.Name)
+                    self.assertEqual("pipeline", calls[0].func.value.id)
+                    self.assertEqual("ask", calls[0].func.attr)
+                else:
+                    self.assertIsInstance(calls[0].func.value, ast.Attribute)
+                    self.assertIsInstance(calls[0].func.value.value, ast.Name)
+                    self.assertEqual("self", calls[0].func.value.value.id)
+                    self.assertEqual("kb", calls[0].func.value.attr)
 
     def test_invalid_aliases_json_identifies_artifact_and_preserves_decode_cause(self) -> None:
         with TemporaryDirectory() as temporary_directory:

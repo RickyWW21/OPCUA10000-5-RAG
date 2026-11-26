@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OPC UA Part 5</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; padding: 12px; color: CanvasText; font: 16px/1.5 system-ui, sans-serif; }
+  h1, h2 { margin: 0 0 8px; font-size: 16px; }
+  #answer { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 14px; }
+  details, .unavailable { border-top: 1px solid color-mix(in srgb, CanvasText 20%, transparent); padding: 8px 0; overflow-wrap: anywhere; }
+  summary { cursor: pointer; }
+  pre { padding: 8px; max-height: 18rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: Canvas; }
+  .meta { display: block; margin: 4px 0 0 1em; color: color-mix(in srgb, CanvasText 80%, Canvas); font-size: 14px; }
+</style>
+<main>
+  <h1>OPC UA Part 5</h1>
+  <p id="answer" lang="auto" dir="auto" role="status">&#31561;&#24453;&#22238;&#31572;&#8230;</p>
+  <section id="sources" aria-labelledby="heading" hidden>
+    <h2 id="heading">&#24341;&#29992;&#19982;&#35268;&#33539;&#21407;&#25991;</h2>
+    <div id="citations"></div>
+  </section>
+</main>
+<script>
+  const $ = id => document.getElementById(id);
+  let rendered;
+  function render() {
+    const bridge = window.openai;
+    const result = bridge?.toolOutput;
+    const metadata = bridge?.toolResponseMetadata;
+    const refs = metadata?.citation_refs
+      ?? metadata?.mcp_tool_result?._meta?.citation_refs
+      ?? metadata?.call_tool_result?._meta?.citation_refs;
+    if (!result || (rendered?.result === result && rendered?.refs === refs)) return;
+    rendered = { result, refs };
+    $("answer").textContent = result.answer;
+    $("citations").replaceChildren();
+    $("sources").hidden = !result.citations?.length;
+    for (const source of result.citations ?? []) {
+      const ref = refs?.[source.id];
+      const label = [source.label, source.title].filter(Boolean).join(" ");
+      const location = [
+        source.kind === "legacy_wiki" ? "Wiki \u5386\u53f2\u5f15\u7528" : "\u89c4\u8303\u539f\u6587",
+        source.version, source.section,
+        source.start_line && `L${source.start_line}\u2013${source.end_line}`,
+      ].filter(Boolean).join(" \u00b7 ");
+      const entry = document.createElement(ref ? "details" : "div");
+      const title = document.createElement(ref ? "summary" : "span");
+      const meta = document.createElement("span");
+      meta.className = "meta";
+      title.textContent = label;
+      meta.textContent = ref ? location : `${location} \u00b7 \u65e0\u53ef\u6821\u9a8c\u7684\u539f\u6587\u5b9a\u4f4d`;
+      title.append(meta);
+      entry.append(title);
+      if (!ref) entry.className = "unavailable";
+      if (ref) {
+        const status = document.createElement("p");
+        status.setAttribute("role", "status");
+        const pre = document.createElement("pre");
+        pre.tabIndex = 0;
+        pre.setAttribute("role", "region");
+        pre.setAttribute("aria-label", `${label} ${location}`);
+        pre.hidden = true;
+        const code = document.createElement("code");
+        pre.append(code);
+        entry.append(status, pre);
+        let loading = false;
+        entry.addEventListener("toggle", async () => {
+          if (!entry.open || loading) return;
+          loading = true;
+          pre.hidden = true;
+          code.textContent = "";
+          status.textContent = "\u6b63\u5728\u6821\u9a8c\u539f\u6587\u2026";
+          try {
+            const response = await bridge.callTool("open_part5_citation", {reference: ref});
+            const excerpt = response?._meta ?? response?.mcp_tool_result?._meta ?? response?.call_tool_result?._meta;
+            if (response?.isError || typeof excerpt?.content !== "string") {
+              status.textContent = response?.content?.[0]?.text || "\u65e0\u6cd5\u6253\u5f00\u539f\u6587";
+              return;
+            }
+            code.textContent = excerpt.content;
+            pre.hidden = false;
+            status.textContent = "";
+          } catch {
+            status.textContent = "\u65e0\u6cd5\u8fde\u63a5\u672c\u5730\u89c4\u8303\u5e93";
+          } finally {
+            loading = false;
+          }
+        });
+      }
+      $("citations").append(entry);
+    }
+  }
+  window.addEventListener("openai:set_globals", event => {
+    if ("toolOutput" in (event.detail?.globals ?? {}) ||
+        "toolResponseMetadata" in (event.detail?.globals ?? {})) render();
+  });
+  render();
+</script>
+</html>

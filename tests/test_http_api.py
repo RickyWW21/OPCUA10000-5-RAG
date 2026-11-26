@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import unittest
@@ -21,7 +22,8 @@ class HttpApiTests(unittest.TestCase):
             json.dumps({"doc": "OPC-10000-5", "sha256": "fixture"}),
             encoding="utf-8",
         )
-        self.client = TestClient(create_app(self.root))
+        self.app = create_app(self.root)
+        self.client = TestClient(self.app)
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -37,7 +39,6 @@ class HttpApiTests(unittest.TestCase):
             "/api/v1/rag/query",
             json={
                 "question": "What is ServerType?",
-                "retrieval_mode": "fts",
                 "top_k": 2,
                 "relationship_depth": 0,
                 "online": False,
@@ -47,17 +48,23 @@ class HttpApiTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(200, response.status_code)
         self.assertEqual("offline", body["mode"])
-        self.assertEqual("exact", body["retrieval_mode"])
+        self.assertEqual("fts", body["retrieval_mode"])
         self.assertEqual("[E1]", body["citations"][0]["label"])
         self.assertIn("[E1]", body["answer"])
 
-    def test_query_rejects_unknown_retrieval_mode(self) -> None:
-        response = self.client.post(
-            "/api/v1/rag/query",
-            json={"question": "ServerType", "retrieval_mode": "semantic"},
-        )
-
-        self.assertEqual(422, response.status_code)
+    def test_query_ignores_legacy_retrieval_mode_field(self) -> None:
+        for legacy_mode in ("hybrid", "auto", "semantic"):
+            with self.subTest(retrieval_mode=legacy_mode):
+                response = self.client.post(
+                    "/api/v1/rag/query",
+                    json={
+                        "question": "ServerType",
+                        "retrieval_mode": legacy_mode,
+                        "online": False,
+                    },
+                )
+                self.assertEqual(200, response.status_code)
+                self.assertEqual("fts", response.json()["retrieval_mode"])
 
     def test_full_evidence_and_citation_fallback_survive_http_and_history(self) -> None:
         write_jsonl(
@@ -69,9 +76,9 @@ class HttpApiTests(unittest.TestCase):
         )
         model = Mock()
         model.generate.side_effect = ["Server evidence. [E1]", "Invented source. [X99]"]
-        request = {"question": "ServerType", "retrieval_mode": "fts", "top_k": 1, "online": True}
+        request = {"question": "ServerType", "top_k": 1, "online": True}
 
-        with patch("opcua_kb.http_api._chat_model", return_value=(model, None)):
+        with patch("opcua_kb.http_api.create_chat_model_from_env", return_value=(model, None)):
             response = self.client.post("/api/v1/rag/query", json=request)
             body = response.json()
             self.assertEqual(200, response.status_code)
@@ -94,14 +101,248 @@ class HttpApiTests(unittest.TestCase):
         self.assertNotIn("X99", fallback.json()["answer"])
         self.assertIn("TAIL FACT", fallback.json()["answer"])
 
+    def test_content_serves_spec_lines_and_rejects_wiki_path(self) -> None:
+        lines = [f"Spec line {number}" for number in range(1, 261)]
+        source_path = self.root / "source" / "OPC-10000-5-v1.05.06.md"
+        source_path.write_text("\n".join(lines), encoding="utf-8")
+        sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
+        (self.root / "source" / "source_manifest.json").write_text(
+            json.dumps(
+                {
+                    "doc": "OPC-10000-5",
+                    "version": "1.05.06",
+                    "sha256": sha256,
+                    "local_source_path": "source/OPC-10000-5-v1.05.06.md",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        spec_response = self.client.get(
+            "/api/v1/content",
+            params={
+                "path": "source/OPC-10000-5-v1.05.06.md",
+                "start_line": 225,
+                "end_line": 250,
+            },
+        )
+        self.assertEqual(200, spec_response.status_code)
+        body = spec_response.json()
+        self.assertEqual("spec", body["kind"])
+        self.assertEqual(225, body["start_line"])
+        self.assertEqual(250, body["end_line"])
+        self.assertEqual("\n".join(lines[224:250]), body["content"])
+
+        missing_path = self.client.get("/api/v1/content")
+        self.assertEqual(422, missing_path.status_code)
+
+        wiki_response = self.client.get(
+            "/api/v1/content",
+            params={"path": "wiki/entities/servertype.md"},
+        )
+        self.assertEqual(404, wiki_response.status_code)
+
+    def test_content_bound_sha256_rejects_stale_source_and_keeps_unbound_compatibility(self) -> None:
+        original_lines = [f"Original spec line {number}" for number in range(1, 41)]
+        source_path = self.root / "source" / "OPC-10000-5-v1.05.06.md"
+        source_path.write_text("\n".join(original_lines) + "\n", encoding="utf-8")
+        original_sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
+        manifest_path = self.root / "source" / "source_manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "doc": "OPC-10000-5",
+                    "version": "1.05.06",
+                    "sha256": original_sha256,
+                    "local_source_path": "source/OPC-10000-5-v1.05.06.md",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        created = self.client.post("/api/v1/conversations", json={"title": "Bound legacy wiki"})
+        self.assertIn(created.status_code, (200, 201))
+        conversation_id = created.json()["id"]
+        session_id, _, _ = self.app.state.sessions.get_or_create_session(
+            self.client.cookies["rag_session"]
+        )
+        self.app.state.sessions.append_message(
+            session_id,
+            conversation_id,
+            role="assistant",
+            content="Historical note [W1].",
+            mode="offline",
+            retrieval_mode="fts",
+            citations=[
+                {
+                    "label": "[W1]",
+                    "title": "ServerType Wiki",
+                    "id": "wiki:servertype",
+                    "source": {
+                        "kind": "wiki",
+                        "path": "wiki/entities/servertype.md",
+                        "version": "1.05.06",
+                        "locations": [{"section": "6.3.1", "start_line": 6, "end_line": 12}],
+                    },
+                }
+            ],
+            retrieved=[],
+        )
+
+        loaded = self.client.get(f"/api/v1/conversations/{conversation_id}")
+        self.assertEqual(200, loaded.status_code)
+        legacy_source = loaded.json()["messages"][-1]["citations"][0]["source"]
+        self.assertEqual("source/OPC-10000-5-v1.05.06.md", legacy_source["spec_path"])
+        self.assertEqual(original_sha256, legacy_source["spec_sha256"])
+
+        valid_bound = self.client.get(
+            "/api/v1/content",
+            params={
+                "path": legacy_source["spec_path"],
+                "start_line": 6,
+                "end_line": 12,
+                "sha256": legacy_source["spec_sha256"],
+            },
+        )
+        self.assertEqual(200, valid_bound.status_code)
+        self.assertEqual("\n".join(original_lines[5:12]), valid_bound.json()["content"])
+
+        replaced_lines = [f"Replaced spec line {number}" for number in range(1, 41)]
+        source_path.write_text("\n".join(replaced_lines) + "\n", encoding="utf-8")
+        replaced_sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "doc": "OPC-10000-5",
+                    "version": "1.05.06",
+                    "sha256": replaced_sha256,
+                    "local_source_path": "source/OPC-10000-5-v1.05.06.md",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        stale_bound = self.client.get(
+            "/api/v1/content",
+            params={
+                "path": legacy_source["spec_path"],
+                "start_line": 6,
+                "end_line": 12,
+                "sha256": legacy_source["spec_sha256"],
+            },
+        )
+        self.assertEqual(409, stale_bound.status_code)
+        self.assertNotIn("Replaced spec line", stale_bound.text)
+
+        unbound = self.client.get(
+            "/api/v1/content",
+            params={
+                "path": legacy_source["spec_path"],
+                "start_line": 6,
+                "end_line": 12,
+            },
+        )
+        self.assertEqual(200, unbound.status_code)
+        self.assertEqual("\n".join(replaced_lines[5:12]), unbound.json()["content"])
+
+    def test_get_conversation_handles_legacy_wiki_messages(self) -> None:
+        created = self.client.post("/api/v1/conversations", json={"title": "Legacy wiki"})
+        self.assertEqual(201 if created.status_code == 201 else 200, created.status_code)
+        conversation_id = created.json()["id"]
+        session_id, _, _ = self.app.state.sessions.get_or_create_session(
+            self.client.cookies["rag_session"]
+        )
+        self.app.state.sessions.append_message(
+            session_id,
+            conversation_id,
+            role="assistant",
+            content="Legacy answer with [W1] and [E1].",
+            mode="offline",
+            retrieval_mode="fts",
+            citations=[
+                {
+                    "label": "[W1]",
+                    "title": "ServerType Wiki",
+                    "id": "wiki:servertype",
+                    "source": {
+                        "kind": "wiki",
+                        "path": "wiki/entities/servertype.md",
+                        "version": "1.05.06",
+                        "status": "draft",
+                        "locations": [],
+                    },
+                },
+                {
+                    "label": "[E1]",
+                    "title": "ServerType",
+                    "id": "ObjectType:ServerType",
+                },
+            ],
+            retrieved=[
+                {
+                    "id": "wiki:servertype",
+                    "type": "wiki",
+                    "title": "ServerType Wiki",
+                    "snippet": "Legacy wiki draft.",
+                    "label": "[W1]",
+                    "source": {
+                        "kind": "wiki",
+                        "path": "wiki/entities/servertype.md",
+                        "version": "1.05.06",
+                        "status": "draft",
+                        "locations": [],
+                    },
+                }
+            ],
+        )
+
+        loaded = self.client.get(f"/api/v1/conversations/{conversation_id}")
+        self.assertEqual(200, loaded.status_code)
+        message = loaded.json()["messages"][-1]
+        for citation in message["citations"]:
+            source = citation.get("source")
+            if source is not None:
+                self.assertNotEqual("wiki", source.get("kind"))
+        for item in message["retrieved"]:
+            source = item.get("source")
+            if source is not None:
+                self.assertNotEqual("wiki", source.get("kind"))
+        wiki_citation = next(c for c in message["citations"] if c["label"] == "[W1]")
+        self.assertEqual("legacy_wiki", wiki_citation["source"]["kind"])
+        self.assertEqual("draft", wiki_citation["source"]["status"])
+        self.assertEqual("wiki/entities/servertype.md", wiki_citation["source"]["path"])
+
     def test_fts_mode_is_available_without_loading_embedding_model(self) -> None:
         response = self.client.post(
             "/api/v1/rag/query",
-            json={"question": "ServerType", "retrieval_mode": "fts"},
+            json={"question": "ServerType"},
         )
 
         self.assertEqual(200, response.status_code)
-        self.assertEqual("exact", response.json()["retrieval_mode"])
+        self.assertEqual("fts", response.json()["retrieval_mode"])
+
+    def test_create_app_starts_without_manifest_and_returns_503_on_rag_query(self) -> None:
+        with TemporaryDirectory() as tmp:
+            missing_root = Path(tmp) / "missing_kb"
+            session_db = Path(tmp) / "sessions.sqlite3"
+            with patch.dict(os.environ, {"SESSION_DB_PATH": str(session_db)}, clear=False):
+                app = create_app(missing_root)
+            client = TestClient(app)
+
+            health = client.get("/api/v1/health")
+            self.assertEqual(200, health.status_code)
+            conversations = client.get("/api/v1/conversations")
+            self.assertEqual(200, conversations.status_code)
+
+            rag_response = client.post(
+                "/api/v1/rag/query",
+                json={"question": "ServerType"},
+            )
+            self.assertEqual(503, rag_response.status_code)
+            self.assertIn("source_manifest.json", rag_response.json()["detail"])
+            conversations_after = client.get("/api/v1/conversations")
+            self.assertEqual(200, conversations_after.status_code)
+            self.assertEqual([], conversations_after.json()["conversations"])
 
     def test_online_query_exposes_missing_model_configuration(self) -> None:
         with patch.dict(
@@ -114,7 +355,7 @@ class HttpApiTests(unittest.TestCase):
         ):
             response = self.client.post(
                 "/api/v1/rag/query",
-                json={"question": "ServerType", "retrieval_mode": "fts", "online": True},
+                json={"question": "ServerType", "online": True},
             )
 
         self.assertEqual(200, response.status_code)

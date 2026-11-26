@@ -1,4 +1,9 @@
+import json
+import os
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 from opcua_kb.llm import LLMError
 from opcua_kb.rag import RAGPipeline
@@ -31,6 +36,56 @@ class FailingChatModel:
 
 
 class RAGTests(unittest.TestCase):
+    def test_flattened_table_9_footnotes_are_explained_without_rewriting_source(self):
+        raw = (
+            "HasComponent,Variable,ServerStatus1,ServerStatusDataType ServerStatusType,Mandatory\n"
+            "HasComponent,Object,ServerCapabilities1,- ServerCapabilitiesType,Mandatory\n"
+            "HasComponent,Object,ServerDiagnostics1,- ServerDiagnosticsType,Mandatory\n"
+            "HasComponent,Object,ServerRedundancy1,- ServerRedundancyType,Mandatory\n"
+            "HasComponent,Object,Channel1,- ChannelType,Optional"
+        )
+        for kind in ("entity", "table", "chunk", "chapter"):
+            with self.subTest(kind=kind):
+                record = RetrievedRecord(
+                    "table-9", kind, "ServerType", "", section="6.3.1",
+                    table_number="9", evidence=raw,
+                )
+                result = RAGPipeline(retriever=EvidenceRetriever([record])).ask("Members?")
+                text = result.retrieved[0]["snippet"]
+                self.assertTrue(text.startswith(raw))
+                for clarification in (
+                    "ServerStatus1 -> ServerStatus",
+                    "ServerCapabilities1 -> ServerCapabilities",
+                    "ServerDiagnostics1 -> ServerDiagnostics",
+                    "ServerRedundancy1 -> ServerRedundancy",
+                ):
+                    self.assertIn(clarification, text)
+                self.assertNotIn("Channel1 -> Channel", text)
+                self.assertIn(raw, result.answer)
+                self.assertEqual(raw, record.evidence)
+
+    def test_table_9_name_notes_obey_evidence_budget_and_do_not_affect_other_tables(self):
+        raw = "HasComponent,Object,ServerCapabilities1,- ServerCapabilitiesType,Mandatory"
+        record = RetrievedRecord(
+            "table-9", "table", "Definition", "", section="6.3.1",
+            table_number="9", evidence=raw,
+        )
+        model = RecordingChatModel("ServerCapabilities [T1].")
+        result = RAGPipeline(
+            retriever=EvidenceRetriever([record]), chat_model=model,
+            max_context_chars=len(f"[T1] Definition\n{raw}"),
+        ).ask("Members?")
+        self.assertEqual("offline", result.mode)
+        self.assertEqual(0, model.calls)
+        self.assertEqual([], result.citations)
+
+        other = RetrievedRecord(
+            "table-999", "table", "Other", "", section="8.1",
+            table_number="999", evidence=raw,
+        )
+        result = RAGPipeline(retriever=EvidenceRetriever([other])).ask("Members?")
+        self.assertEqual(raw, result.retrieved[0]["snippet"])
+
     def test_pipeline_offline_answer_contains_part5_citations(self):
         result = RAGPipeline(retriever=FixtureRetriever()).ask("What is ServerType?", top_k=2)
         self.assertEqual(result.mode, "offline")
@@ -260,6 +315,79 @@ class RAGTests(unittest.TestCase):
         self.assertIn("e1 HAS_COMPONENT e2", model.user_prompt)
         self.assertEqual("e2", result.retrieved[0]["id"])
         self.assertEqual("[R1]", result.citations[0]["label"])
+
+    def test_create_retriever_accepts_path_or_kb(self):
+        from opcua_kb import create_retriever
+        from opcua_kb.api import KnowledgeBase
+        from opcua_kb.retrieval import Part5Retriever
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            source.mkdir()
+            (source / "source_manifest.json").write_text(
+                json.dumps({"doc": "OPC-10000-5"}), encoding="utf-8"
+            )
+            kb = KnowledgeBase(root)
+
+            for arg in (root, str(root), kb):
+                with self.subTest(arg=type(arg).__name__):
+                    retriever = create_retriever(arg)
+                    self.assertIsInstance(retriever, Part5Retriever)
+                    self.assertEqual("fts", retriever.mode)
+
+    def test_create_chat_model_from_env_handles_missing_key(self):
+        from opcua_kb import create_chat_model_from_env
+
+        with mock.patch.dict(os.environ, {}, clear=True):
+            model, error = create_chat_model_from_env()
+        self.assertIsNone(model)
+        self.assertIsInstance(error, str)
+        self.assertTrue(error)
+
+    def test_create_chat_model_from_env_reads_deepseek_and_openai_env(self):
+        from opcua_kb.llm import OpenAICompatibleChatModel
+        from opcua_kb.rag import create_chat_model_from_env
+
+        with mock.patch.dict(os.environ, {"DEEPSEEK_API_KEY": "ds-key"}, clear=True):
+            model, error = create_chat_model_from_env()
+        self.assertIsNone(error)
+        self.assertIsInstance(model, OpenAICompatibleChatModel)
+        self.assertEqual("ds-key", model.api_key)
+        self.assertEqual("deepseek-chat", model.model)
+        self.assertEqual("https://api.deepseek.com/chat/completions", model.endpoint)
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "OPENAI_API_KEY": "oa-key",
+                "OPENAI_MODEL": "gpt-4o-mini",
+                "OPENAI_BASE_URL": "https://api.openai.com/v1",
+            },
+            clear=True,
+        ):
+            model, error = create_chat_model_from_env()
+        self.assertIsNone(error)
+        self.assertIsInstance(model, OpenAICompatibleChatModel)
+        self.assertEqual("oa-key", model.api_key)
+        self.assertEqual("gpt-4o-mini", model.model)
+        self.assertEqual("https://api.openai.com/v1/chat/completions", model.endpoint)
+
+    def test_rag_pipeline_rejects_wiki_citation_labels(self):
+        record = RetrievedRecord("e1", "entity", "First", "ignored", evidence="full evidence")
+        for answer in ("[W1]", "[E1] and [W1]"):
+            with self.subTest(answer=answer):
+                model = RecordingChatModel(answer)
+                result = RAGPipeline(
+                    retriever=EvidenceRetriever([record]),
+                    chat_model=model,
+                    max_context_chars=2000,
+                ).ask("question")
+
+                self.assertEqual("offline", result.mode)
+                self.assertTrue(result.error)
+                self.assertEqual(["[E1]"], [item["label"] for item in result.citations])
+                self.assertIn("[E1]", result.answer)
 
 
 if __name__ == "__main__": unittest.main()

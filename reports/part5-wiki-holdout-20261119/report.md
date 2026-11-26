@@ -1,0 +1,184 @@
+# Part 5 新题独立测试报告
+
+测试日期：2026-11-19，Asia/Hong_Kong。规范：OPC 10000-5 v1.05.06。
+
+## 结论
+
+这组未参与此前调优的 16 道新题中，**Wiki＋原文混合检索没有体现回答准确性优势**。纯原文最终事实覆盖为 **31/32（96.9%）**，混合为 **28.5/32（89.1%）**。混合组有一道连接失败，其两个事实的缺失属于运行失败，不能全部归因于检索。
+
+仅比较两组都实际获得模型文本的 15 道共同题，纯原文为 **29/30（96.7%）**，混合为 **28.5/30（95.0%）**；完整且有规范引用的回答分别为 **14/15**、**13/15**。这部分差异来自 H09 的正文规则漏答。H06 则是两组共有的证据缺口。没有任何一道题出现混合组事实得分超过原文组。
+
+引用标签和来源目标有效，但**可打开的原文章节完整，不等于送入模型的证据完整**。H09 的实体引用能打开完整章节，实际提供给模型的实体摘要与表格却缺关键正文。
+
+## 测试隔离与方法
+
+- 在线前冻结 [题集](../../tests/fixtures/part5_wiki_holdout_20261119.json) 和 [协议](protocol.md)，8 道中文、8 道英文，全部为可由 Part 5 回答的正向题，每题两个金标准事实，共 32 分。完整问题、参考答案、事实来源章节和行号均在题集中。
+- H01–H16 的问题和主考事实未用于此前调优；主考来源章节与旧 16 题的金标准章节无交集。语料仍是同一份规范，部分名称曾出现在旧题的组件清单或无关召回中，因此这不是语料留出或模型预训练去污染实验。
+- 题目由 Codex 根据冻结原文选取，涵盖属性、对象类型、事件类型、变量类型、导航入口、Method 和数据类型；不是随机抽样或独立第三方盲评。
+- 被测代码、Wiki、规范、FTS 索引与上一轮最终调优版本完全一致；没有为新题新增 Wiki 页面或调整检索、证据预算、提示词。原文组在检索入口排除 Wiki，而非混合检索之后再删除 Wiki。
+- 同用 `deepseek-chat`、`temperature=0`、`top_k=6`、`relationship_depth=0`、12000 字符上下文预算、FTS、`workers=2`。保存实际系统提示、用户提示、原始输出、最终输出、候选记录及来源检查。
+- 事实评分沿用 1=完整正确、0.5=部分正确、0=遗漏或错误。完整题要求两个事实均完整且有实际引用的相关规范原文支持。Wiki 草稿单独支持不能作为规范确认。
+- 所有 31 条模型文本均逐题读取并对照金标准及所引证据评分；详细依据保存在 [review.json](review.json)。这是 AI 辅助语义复核，无独立人工签字。
+- 不根据内容修改题目或重试挑选答案。此前报告及旧题运行文件没有改写。本轮只新增评估材料，并使离线审计工具从运行元数据读取对应题集、记录模型错误次数，未修改被测实现或前端。
+
+## 连接故障与保留原则
+
+首次直连批次保存了 10 条 `LLM request failed`，未获得任何模型文本，随后终止；在途未保存任务不计入这 10 条。[失败批次](run.jsonl) 及其元数据保留。
+
+在获得任何模型回答前，协议记录了基础设施例外：通过已有本地代理，只为评估子进程设置 `HTTPS_PROXY=http://127.0.0.1:8118`，在独立输出文件中完整重启。没有修改系统网络设置、关闭 TLS 校验或变更模型服务地址。该例外属于连接恢复，不是基于答案质量选择重跑。
+
+[正式批次](run-connected.jsonl) 保存全部 32 个题目与组别组合，其中 31 条有模型文本；H05 混合组再次连接失败，耗时约 21.06 秒，最终回退为离线证据列表。按协议保留且不再重试。它计入交付覆盖率，但不被描述为模型给出了错误事实。
+
+## 指标
+
+| 指标 | 纯原文 RAG | Wiki＋原文 |
+|---|---:|---:|
+| 题目数／金标准事实分母 | 16／32 | 16／32 |
+| 实际模型文本／生成回答 | 16／16 | 15／15 |
+| 模型请求错误 | 0 | 1（H05） |
+| 最终事实覆盖 | 31/32，96.9% | 28.5/32，89.1% |
+| 带实际引用覆盖的事实分值 | 31/32 | 28.5/32 |
+| 有规范原文支撑的事实分值 | 31/32 | 28.5/32 |
+| 两事实完整且有规范引用的题目 | 15/16，93.8% | 13/16，81.3% |
+| 无效引用标签的回答数 | 0 | 0 |
+| 来源机械检查通过 | 91/91 | 202/202 |
+| 实际选入 Wiki 的题目 | 0/16 | 10/16 |
+| 平均证据字符数 | 7745.94 | 11322.88 |
+| 最大证据字符数 | 11951 | 11997 |
+| 单题流水线耗时中位数 | 2365.30 ms | 2512.85 ms |
+| 单题流水线耗时平均数 | 2501.90 ms | 3917.34 ms |
+
+流水线耗时包含模型请求；均值受 H05 连接超时及网络影响，不能当作稳定的检索性能结论。最终覆盖与原始模型内容评分相同；H05 离线证据列表不算综合回答。
+
+**共同响应配对分析：**将 H05 同时从两组移除，保留 15 题、30 分：原文 29/30，混合 28.5/30；完整题原文 14/15，混合 13/15。全量 2.5 分差距中，2 分来自连接失败，0.5 分来自 H09 的内容漏答。未用任何补跑结果替换失败。
+
+本次没有边界题，范围外拒答或版本比较安全性指标为“不适用”。不能与旧题集的“14 道正向题＋2 道边界题”直接合并或比较完整题比例。
+
+## 逐题结果
+
+各题满分为 2；行号均指本地 `source/OPC-10000-5-v1.05.06.md`。引用标签仅在各自回答内部有效。
+
+| ID／语言 | 主考点／原文位置 | 原文 | 混合 | 复核结果 |
+|---|---|---:|---:|---|
+| H01 中文 | 符号路径、NodeId、NamespaceIndex；§4.1 L129–135 | 2 | 2 | 规则完整，有规范引用 |
+| H02 English | ArrayDimensions、AccessLevelEx；§5.3 Table 5 L177、179 | 2 | 2 | 两组均完整 |
+| H03 中文 | ServerRedundancyType；§6.3.7 L534–536 | 2 | 2 | NONE、会话期间变化与顺序均完整 |
+| H04 English | AddressSpaceFileType；§6.3.12 L674 | 2 | 2 | 先更新 XML、仅静态配置值均完整 |
+| H05 中文 | NamespaceMetadataType；§6.3.13 L719–723 | 2 | 0* | 原文完整；混合连接失败，无模型文本 |
+| H06 English | EventQueueOverflowEventType；§6.4.34 L1591、1604 | 1 | 1 | 均缺事件含义／触发条件归属，来源字段正确 |
+| H07 中文 | ProgressEventType；§6.4.35 L1626–1628 | 2 | 2 | Context 与 Progress 规则完整 |
+| H08 English | OrderedListType；§6.10 L1777–1788 | 2 | 2 | 显式序号、版本与模型变化事件完整 |
+| H09 中文 | OptionSetType；§7.17 L2200、2204–2206 | 2 | 1.5 | 混合缺允许类型清单与逐位订阅用途 |
+| H10 English | SelectionListType；§7.18 L2225、2231 | 2 | 2 | 动态／空列表与限制条件完整 |
+| H11 中文 | AudioVariableType；§7.19 Table 89 L2259–2265 | 2 | 2 | 类型、标量及三个可选属性完整 |
+| H12 English | InterfaceTypes；§8.2.11 L2665、2669 | 2 | 2 | 引用类别与非强制可达性完整 |
+| H13 中文 | GetMonitoredItems Method；§9.1 L2983–2998 | 2 | 2 | 输入输出与 Session 权限错误完整 |
+| H14 English | ResendData Method；§9.2 L3015–3024 | 2 | 2 | Reporting、当前值及签名完整 |
+| H15 中文 | RationalNumber；§12.22 Table 265 L5119–5120 | 2 | 2 | 分子符号与分母类型完整 |
+| H16 English | TrimmedString；§12.43 L5544 | 2 | 2 | 拒绝／裁剪选项及 Unicode 空白完整 |
+
+`*` H05 的 0 分表示未交付回答，不表示判定模型陈述错误。
+
+### H06：共有的表前正文遗漏
+
+金标准 L1591 说明：订阅 Events 的 MonitoredItem 内部队列溢出，并由 Part 4 定义何时生成该内部事件。两组候选中均有实体 `EventType:EventQueueOverflowEventType`，但没有完整的 `sec-6.4.34` 或其表前正文块。
+
+实际 E1 包含定义表及表后的 SourceNode／SourceName 规则，缺表前 L1591。两组都正确给出 Server Object NodeId 与 `Internal/EventQueueOverflow`，同时对触发信息说明证据不足，故分别计 `[0,1]`。这是召回／实体正文组装的缺口，而不是观察到模型编造条件。
+
+混合组虽带入 events-and-auditing Wiki 及 BaseEventType、AuditEventType 的展开原文，但这些内容没有补齐该事件的专属正文，未改善得分。
+
+### H09：候选阶段的正文置换
+
+纯原文六个候选为：
+
+```text
+VariableType:OptionSetType, ModellingRule:Optional,
+table-87, chunk-table-87, sec-7.17, chunk-sec-7.17-001
+```
+
+混合六个候选为：
+
+```text
+VariableType:OptionSetType, wiki:server-information-model,
+wiki:events-and-auditing, ModellingRule:Optional,
+table-87, chunk-table-87
+```
+
+两个 Wiki 候选占用返回名额后，完整 `sec-7.17` 和正文块没有进入混合候选。最终证据又带入 AuditEventType、BaseObjectType、BaseEventType 等展开内容；这些并不支持本题缺失规则。混合上下文为 11955 字符，仍符合预算，因此不能将问题仅归因于最终字符截断。
+
+E1 英文摘要说明最低位对应首项、无意义位用 empty LocalizedText，定义表提供 Optional Boolean[] BitMask；它没有提供 L2204–2206 的允许类型与逐位订阅说明。模型据此承认证据没有清单／运行时语义。第二事实仅部分覆盖，计 0.5；完整第一事实计 1。
+
+E1 来源 URL 实际覆盖 §7.17 L2198–2220，能打开全部正确正文，故不算“原文链接坏了”。问题发生在送入模型的内容选择与实体证据组装。纯原文回答则引用实际含这些段落的 C2/C3，获得 2 分。
+
+### H05：运行失败单独归类
+
+混合已有 NamespaceMetadataType 原文证据，但模型请求失败。此结果不能说明其检索未找到事实，也不能依据离线证据列表推断模型本来会答对。共同响应分析将 H05 从两组同时排除。
+
+## 引用完整性与原文定位
+
+- **语义支持：**所有获得事实分值的内容均有实际引用的规范记录支持，覆盖原文 31 分、混合 28.5 分。这里只审计金标准事实，不把它称为所有附加句子的引用精确率。
+- **完整题：**原文 15/16，混合 13/16。已有内容有来源，不代表漏答部分已被覆盖；不得以“引用覆盖已答内容 100%”冒充“问题完整回答 100%”。
+- **标签：**32 个最终结果均未出现无效标签，31 条模型文本使用的支持标签可在各自返回记录中找到。
+- **机械来源检查：**293/293 通过，包含规范路径、版本、章节／表格与行范围，以及 Wiki 元数据及其 source_refs。它检查格式、定位和范围，不独自证明语义支持。
+- **金标准定位交叉核对：**60 个获得非零分的事实槽位，均至少有一个实际支持引用的规范范围覆盖相应冻结金标准行范围；部分分值仍按内容完整度计分，不因链接完整而加分。
+- **HTTP 内容检查：**[audit.json](audit.json) 记录 132 个去重目标全部 200，其中规范目标 117、Wiki 页面 15。包括回答引用、来源检查范围，以及 Wiki 页面互链递归展开。规范返回内容逐行匹配本地原文切片，版本均为 1.05.06，起止行与请求一致；Wiki 保持 draft。
+- HTTP 检查使用现有 FastAPI `TestClient` 在进程内完成；没有修改前端，也没有把它宣称为浏览器点击验收。
+
+例如 H09 E1 的规范目标可定位到 `§7.17 L2198–2220`；H06 第二事实可回查 `§6.4.34 L1604`。前者说明“定位正确、模型证据仍不完整”的区别。
+
+## 冻结与验证记录
+
+| 对象 | SHA-256 |
+|---|---|
+| 新题集 | `202c05ddd5455043f6aa5fabea55d8b083a7149fc7304b1ebcf19682b3b5b15b` |
+| 正式运行 run-connected.jsonl | `83cd1fe26ed5c2d7791c3adc62d27d6e313a4e5047cbe2c0d4daaf64a32f4f1e` |
+| 直连失败 run.jsonl | `778a39e649a951fe4ae3aa0a70d6d07118d193dece873b4c437e96fcf143f3ac` |
+| 规范原文 v1.05.06 | `c8eca3199423cbe5746e6e0aa4782fb990494474668cc9f6b9000cb142aa42bf` |
+
+被测代码、Wiki 和 FTS 的完整哈希见 `run-connected.meta.json`，与此前 `run-array-coverage-final.meta.json` 一致，离线审计再次验证当前文件一致。前端 App.tsx、App.css 和 HTTP API 另行核对未变。
+
+验证结果：195 项单元测试通过；Wiki 校验通过（12 个实体、3 个主题）；`git diff --check` 通过。旧题最终运行的离线审计回归通过，仍为两组各 32/32 事实分、14/14 完整正向题、2/2 边界题通过，说明本轮审计工具的题集适配未改变旧结果。
+
+评估目录保留 `protocol.md`、`preflight.jsonl`／元数据、直连失败批次、正式批次、`review.json`、`audit.json` 及旧题审计回归 `audit-old-regression.json`。离线预检同样为 32 条、293 项来源检查全部通过，未据此调整题目或系统。
+
+> **归档复核说明（FTS5 精简后）：** `tools/check_wiki_evaluation.py` 与 `tools/evaluate_wiki_rag.py` 已在 RAG 架构精简提交 `7883c5f` 中下线。Windows 下 `core.autocrlf=true` 会改写换行符导致 SHA-256 校验失败；如需完全在独立副本内复核（不修改主仓任何文件），请按以下步骤以 LF 检出快照 `4bc314d`，并在副本内还原评估时为 CRLF 的文件与本副本内题集路径：
+> ```powershell
+> git -c core.autocrlf=false worktree add .worktrees/wiki-eval-4bc314d 4bc314d
+> cd .worktrees/wiki-eval-4bc314d
+> python -c "import json; from pathlib import Path
+> root = Path.cwd()
+> for rel in ('opcua_kb/__init__.py', 'opcua_kb/api.py', 'opcua_kb/llm.py', 'opcua_kb/retrieval.py', 'reports/part5-wiki-holdout-20261119/run-connected.jsonl'):
+>     p = root / rel; p.write_bytes(p.read_bytes().replace(b'\r\n', b'\n').replace(b'\n', b'\r\n'))
+> mp = root / 'reports/part5-wiki-holdout-20261119/run-connected.meta.json'
+> meta = json.loads(mp.read_text(encoding='utf-8'))
+> meta['fixture']['path'] = str(root / 'tests/fixtures/part5_wiki_holdout_20261119.json')
+> mp.write_text(json.dumps(meta, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')"
+> ```
+> 再执行下方命令（复核完成后可 `cd ../..; git worktree remove --force .worktrees/wiki-eval-4bc314d` 清理）：
+
+无需模型调用即可复核本次运行：
+
+```powershell
+python -X utf8 tools/check_wiki_evaluation.py --run ../part5-wiki-holdout-20261119/run-connected.jsonl --review ../part5-wiki-holdout-20261119/review.json --output ../part5-wiki-holdout-20261119/audit.json
+python -X utf8 tools/check_wiki.py
+python -m unittest discover
+git diff --check
+```
+
+正式在线运行使用现有 `tools/evaluate_wiki_rag.py`，参数为：
+
+```text
+--fixture tests/fixtures/part5_wiki_holdout_20261119.json
+--online --workers 2 --model deepseek-chat --base-url https://api.deepseek.com
+--output reports/part5-wiki-holdout-20261119/run-connected.jsonl
+```
+
+本轮不再次调用模型，不覆盖正式输出。未来重新采样必须使用新的输出文件并单独报告，不能替换本次样本。
+
+## 解释范围
+
+本次小样本、单次生成、AI 辅助判分，没有重复采样、独立人工盲评或显著性检验；模型服务别名也不是固定权重快照。现有 Wiki 只有 15 个内容页面，并未覆盖所有新考点，结果衡量的是这份现有 Wiki 与当前检索实现的组合。
+
+本次可支持的结论是：旧题调优达标不能直接推导新题优势；在本组新题中，混合检索带来更多上下文，却未提升核心事实覆盖，且 H09 暴露了候选名额和正文覆盖问题。机械引用与原文定位整体有效，仍需与回答完整性分开判断。
+
+后续若开展修复，应优先检查完整相关正文在候选阶段的保留，以及实体表前／表中间正文的证据组装。本任务只评估，不实施修复。H01–H16 已公开并经过分析，今后若据此调优，不得继续把它们称为未参与调优的新题；下一次泛化评估需要另一份冻结题集。

@@ -23,8 +23,18 @@ class AskCliTests(unittest.TestCase):
         result = run_cli_script("tools/ask_kb.py", "What is ServerType?", "--offline")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("offline", result.stdout)
-        self.assertIn("引用", result.stdout)
+        self.assertIn("retrieval=fts", result.stdout)
+        self.assertIn("引用:", result.stdout)
+        self.assertNotIn("寮曠敤", result.stdout)
         self.assertIn("[E1]", result.stdout)
+
+    def test_ask_cli_rejects_removed_embedding_flags(self) -> None:
+        for flag in ("--no-embeddings", "--embedding-model"):
+            with self.subTest(flag=flag):
+                args = [flag] if flag == "--no-embeddings" else [flag, "fake"]
+                result = run_cli_script("tools/ask_kb.py", "What is ServerType?", "--offline", *args)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("unrecognized arguments", result.stderr)
 
     def test_ask_cli_rejects_empty_question_without_traceback(self) -> None:
         result = run_cli_script("tools/ask_kb.py", "   ")

@@ -1,0 +1,60 @@
+{
+  "format": 1,
+  "started_at_utc": "2026-11-18T09:07:37.353709+00:00",
+  "safe_config": {
+    "online": true,
+    "model": "deepseek-chat",
+    "base_url": "https://api.deepseek.com",
+    "top_k": 6,
+    "relationship_depth": 0,
+    "max_context_chars": 12000,
+    "arms": [
+      "original",
+      "mixed"
+    ],
+    "temperature": 0.0
+  },
+  "source": {
+    "path": "source/OPC-10000-5-v1.05.06.md",
+    "doc": "OPC-10000-5",
+    "version": "1.05.06",
+    "sha256": "c8eca3199423cbe5746e6e0aa4782fb990494474668cc9f6b9000cb142aa42bf"
+  },
+  "fixture": {
+    "path": "D:\\Users\\admin\\My Document\\OPCUA10000-5\\tests\\fixtures\\part5_wiki_comparison.json",
+    "sha256": "d742864eefaff15102757f52ab9d25c8d3b9d896f3372ca559e76984a81cd990",
+    "cases": 16
+  },
+  "wiki_sha256": {
+    "wiki/AGENTS.md": "5afd6631f3611b4b266d0c631c1635774d99d21b6f17cb9c14289383001f0713",
+    "wiki/entities/auditeventtype.md": "73519f33cd17a1a2660f57d53e593d1790c8745b68c84cdd371ddff4daa077f3",
+    "wiki/entities/baseeventtype.md": "be2f0b2b926e2d00a906451d65697653a3dc7687adf07afde6433ad0f63f67d8",
+    "wiki/entities/baseobjecttype.md": "ccccfd5d75a3833e6a3ac0bf99e5d2d693b8376c5411fdaf39cd1c894af8d567",
+    "wiki/entities/buildinfotype.md": "109d83abc6ac1c246058b4fed1de3c1a6abc3c41559cfb478ccc218237c2cac6",
+    "wiki/entities/modellingruletype.md": "511d1b342235bad3ec91a5aba17afb2cfc71835145c40dc3850dd82384192a28",
+    "wiki/entities/operationlimitstype.md": "e7de3cc17acd5043efaf6b558f577be08f35983b57a34f0b1082b5fae15ee71a",
+    "wiki/entities/servercapabilitiestype.md": "b5b2cb9b3ece666a78434b5e97915f234e0398e09cf81545b388a2abd7b5aa69",
+    "wiki/entities/serverdiagnosticstype.md": "de029bbaed1f0c31add57cafb8216cbd94adcbcd1ceb2e8f43e43b6ac42f13ed",
+    "wiki/entities/serverstatustype.md": "27d5e710d1ccce912664628eeee3af98f2471abf812b7aa3b3d09f9211fa51fb",
+    "wiki/entities/servertype.md": "69752710126a975b9e885b2e23757275a44f94c949b44984beb0e16ab05cfe1a",
+    "wiki/entities/sessiondiagnosticsobjecttype.md": "7cb4e49cc66fd4446f2090fa38c849a7a73f901507820c48257f6e9a9d00725b",
+    "wiki/entities/sessionsdiagnosticssummarytype.md": "e342e1cc35dbe047f164cb9f9c79558c32f176af05100f4decae25af64353c56",
+    "wiki/index.md": "c9c1edc5ed740faa43539ef38ffc236899e5ffc048436e46c3674fd4f2fbc05a",
+    "wiki/log.md": "4b0620c7515efb5cada028fbeeceb531e2bce55091561ba060543c985a26f9e9",
+    "wiki/topics/diagnostics.md": "b1aab37ae6abb6122c4b87d73a0e2f477e7c406e675a0a850547331d9f5ab043",
+    "wiki/topics/events-and-auditing.md": "66aff68d2a32518af01eb2fddff576e6f65bb06d43d320573e5221e7d1763912",
+    "wiki/topics/server-information-model.md": "e9ed0f6c075363070be3129d202c092e56a7c7cc08b69dd80183e4f77abef7b0"
+  },
+  "code_sha256": {
+    "opcua_kb/__init__.py": "a1dac25f98b1acbbc0a032b8913938ae49fb9032c66d1d4fb81ca1aad8efe761",
+    "opcua_kb/api.py": "d0783d3f6c10cf57f89675c6ed7178363c82a7de6adebb349c91a352f6f11a2b",
+    "opcua_kb/llm.py": "17ac1c6f9adc613abb37b4c98b1deb06d0836a9e31ddb00aa2490830bf5bcf06",
+    "opcua_kb/rag.py": "dc63aae7abcb8b706629d5b5c8bc30fd7460c81cea8e2d9d6e5a738b6e395af6",
+    "opcua_kb/retrieval.py": "950674d33864c52a78c42a388dce9515e927bd7a821fe354e19580cf1e4f3467",
+    "opcua_kb/source_view.py": "d8326371e26876ba79ea06ed7e744f2826caca2dc00e6de561214553c7244e95",
+    "opcua_kb/wiki.py": "d0a3deae3603a8fe0c5de72c8f0cd309b45144ebdd942ea35962e48faccefcf3",
+    "tools/evaluate_wiki_rag.py": "2ec1f725dbcf0546a92787c422ee44a0f7bdf643e82f5ea77cff247c083df631"
+  },
+  "fts_sha256": "e433c8e62dfb0debd4e4c33786f74ac6102fef17d9ee6a9470f14db24d052699",
+  "metrics_note": "mechanical citation/source checks only; not semantic accuracy"
+}

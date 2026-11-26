@@ -1,0 +1,178 @@
+[
+  {
+    "id": "H01",
+    "question": "Part 5 中节点的符号名如何构成，实际 NodeId 由哪里定义？标准定义节点与服务器动态生成节点的 NamespaceIndex 有什么不同？",
+    "category": "positive",
+    "expected_ids": ["sec-4.1"],
+    "gold_facts": [
+      {"id":"H01.f1","claim":"Part 5 给的是符号名，实际 NodeId 由 OPC 10000-6 定义；独立节点的符号名为 BrowseName，HasProperty/HasComponent 部件按父节点符号路径加点号和自身 BrowseName 组成。","source":{"section":"4.1","start_line":129,"end_line":131}},
+      {"id":"H01.f2","claim":"标准定义节点的 NodeId NamespaceIndex 为 0；服务器生成的节点（如会话节点）NodeId 与命名空间由服务器决定，NamespaceIndex 不得为 0。","source":{"section":"4.1","start_line":133,"end_line":135}}
+    ],
+    "reference_answer": "符号名由 BrowseName 及 HasProperty/HasComponent 的层级点号路径构成，实际 NodeId 在 Part 6 中定义。标准定义节点使用 NamespaceIndex 0，服务器动态生成节点使用服务器特定 NodeId 和非 0 的命名空间索引。"
+  },
+  {
+    "id": "H02",
+    "question": "For namespace-zero Variables, how does ValueRank affect whether ArrayDimensions is supplied, and what must bits 8, 9 and 10 of AccessLevelEx be if that attribute is present?",
+    "category": "positive",
+    "expected_ids": ["sec-5.3","table-5"],
+    "gold_facts": [
+      {"id":"H02.f1","claim":"ValueRank <= 0 时 ArrayDimensions 可为 null 或缺失，由服务器决定；ValueRank > 0 时必须提供 ArrayDimensions。","source":{"section":"5.3","table":"table-5","start_line":177,"end_line":177}},
+      {"id":"H02.f2","claim":"提供 AccessLevelEx 时 bits 8、9、10 必须为 0，表示单个 Variable 的读写操作原子性以及数组允许部分写入。","source":{"section":"5.3","table":"table-5","start_line":179,"end_line":179}}
+    ],
+    "reference_answer": "ArrayDimensions may be null or absent for ValueRank <= 0 and is required for ValueRank > 0. If AccessLevelEx is present, bits 8, 9 and 10 are zero, meaning atomic reads/writes on an individual Variable and support for partial array writes."
+  },
+  {
+    "id": "H03",
+    "question": "直接使用 ServerRedundancyType 而非其子类型时，RedundancySupport 必须取什么值？RedundantServerArray 能否在会话中变化，其元素顺序要与什么保持一致？",
+    "category": "positive",
+    "expected_ids": ["ObjectType:ServerRedundancyType","sec-6.3.7"],
+    "gold_facts": [
+      {"id":"H03.f1","claim":"直接使用 ServerRedundancyType（无子类型）的实例，其 RedundancySupport 必须为 NONE。","source":{"section":"6.3.7","start_line":534,"end_line":534}},
+      {"id":"H03.f2","claim":"RedundantServerArray 可在 Session 期间变化，但元素顺序必须始终与 ServerUriArray 的元素顺序相同。","source":{"section":"6.3.7","start_line":536,"end_line":536}}
+    ],
+    "reference_answer": "直接实例的 RedundancySupport 为 NONE。RedundantServerArray 可以在会话中变化，但必须始终按 ServerUriArray 的顺序排列。"
+  },
+  {
+    "id": "H04",
+    "question": "For AddressSpaceFileType, what should a client do before reading the exported XML file, and which Value Attributes does ExportNamespace include?",
+    "category": "positive",
+    "expected_ids": ["ObjectType:AddressSpaceFileType","sec-6.3.12"],
+    "gold_facts": [
+      {"id":"H04.f1","claim":"客户端应先调用 ExportNamespace 更新所代表的 XML 文件，再使用 FileType 的 Methods 访问该文件。","source":{"section":"6.3.12","start_line":674,"end_line":674}},
+      {"id":"H04.f2","claim":"ExportNamespace 仅在 Value Attributes 表示静态配置信息时导出这些 Value Attributes。","source":{"section":"6.3.12","start_line":674,"end_line":674}}
+    ],
+    "reference_answer": "Call ExportNamespace first to update the XML file, then access it through FileType Methods. Value Attributes are exported only when they represent static configuration information."
+  },
+  {
+    "id": "H05",
+    "question": "NamespaceMetadataType 的 StaticNodeIdTypes、StaticNumericNodeIdRange 和 StaticStringNodeIdPattern 如何判断静态节点？若某个 IdType 已列入 StaticNodeIdTypes，对应的范围或模式还生效吗？",
+    "category": "positive",
+    "expected_ids": ["ObjectType:NamespaceMetadataType","sec-6.3.13"],
+    "gold_facts": [
+      {"id":"H05.f1","claim":"StaticNodeIdTypes 列出的 IdType 对应命名空间中使用该 IdType 的所有节点都必须为静态；若已包含 numeric NodeId 类型，忽略 StaticNumericNodeIdRange，否则该属性列出静态 numeric NodeId 的范围。","source":{"section":"6.3.13","start_line":719,"end_line":721}},
+      {"id":"H05.f2","claim":"StaticStringNodeIdPattern 用 Like Operator 定义的正则表达式过滤静态 string NodeId；若 StaticNodeIdTypes 已包含 string NodeId 类型，则忽略该模式。","source":{"section":"6.3.13","start_line":723,"end_line":723}}
+    ],
+    "reference_answer": "StaticNodeIdTypes 对列出的标识类型整体声明静态。NumericRange 与 StringPattern 分别细分 numeric/string 静态节点，但当对应类型已整体列入 StaticNodeIdTypes 时，该类型的范围或模式被忽略。"
+  },
+  {
+    "id": "H06",
+    "question": "What situation does EventQueueOverflowEventType represent, where are its generation conditions defined, and what SourceNode and SourceName values does Part 5 require?",
+    "category": "positive",
+    "expected_ids": ["EventType:EventQueueOverflowEventType","sec-6.4.34"],
+    "gold_facts": [
+      {"id":"H06.f1","claim":"该事件表示订阅 Events 的 MonitoredItem 在服务器中的内部队列溢出；何时应生成该内部事件由 OPC 10000-4 定义。","source":{"section":"6.4.34","start_line":1591,"end_line":1591}},
+      {"id":"H06.f2","claim":"SourceNode 必须为 Server Object 的 NodeId，SourceName 必须为 Internal/EventQueueOverflow。","source":{"section":"6.4.34","start_line":1604,"end_line":1604}}
+    ],
+    "reference_answer": "It reports overflow of the internal event queue of a MonitoredItem subscribing for Events; Part 4 defines when the internal event is generated. SourceNode is the Server Object's NodeId and SourceName is Internal/EventQueueOverflow."
+  },
+  {
+    "id": "H07",
+    "question": "ProgressEventType 用于报告 Service 调用进度时，Context 应存什么、采用什么类型？Progress 的有效范围和完成值是什么？",
+    "category": "positive",
+    "expected_ids": ["EventType:ProgressEventType","sec-6.4.35"],
+    "gold_facts": [
+      {"id":"H07.f1","claim":"报告 Service 调用时 Context 必须为 UInt32，内容为该 Service 调用 RequestHeader 的 requestHandle。","source":{"section":"6.4.35","start_line":1626,"end_line":1626}},
+      {"id":"H07.f2","claim":"Progress 表示完成百分比，取值必须在 0 到 100，100 表示操作已经完成。","source":{"section":"6.4.35","start_line":1628,"end_line":1628}}
+    ],
+    "reference_answer": "Context 是 UInt32 类型的 RequestHeader.requestHandle。Progress 是 0–100 的完成百分比，100 表示已完成。"
+  },
+  {
+    "id": "H08",
+    "question": "For OrderedListType, why is HasOrderedComponent alone insufficient for some clients, what must each ordered Object implement, and what must happen to NodeVersion and model-change events when the order changes?",
+    "category": "positive",
+    "expected_ids": ["ObjectType:OrderedListType","sec-6.10"],
+    "gold_facts": [
+      {"id":"H08.f1","claim":"部分客户端不保留 Browse 返回顺序，故每个有序 Object 必须实现 IOrderedObjectType，并含 Mandatory NumberInList 属性，以明确提供顺序。","source":{"section":"6.10","start_line":1777,"end_line":1788}},
+      {"id":"H08.f2","claim":"顺序变化被视为添加和删除 References，NodeVersion 必须变化并发出 GeneralModelChangeEvent，指示 References 被添加和删除。","source":{"section":"6.10","start_line":1779,"end_line":1779}}
+    ],
+    "reference_answer": "Some clients reorder Browse results, so each Object implements IOrderedObjectType with mandatory NumberInList. Reordering counts as adding/deleting References: NodeVersion changes and a GeneralModelChangeEvent reports those changes."
+  },
+  {
+    "id": "H09",
+    "question": "OptionSetType 的 OptionSetValues 数组如何对应位掩码，无具体含义的位怎样表示？其值允许哪些数据类型，Optional BitMask 提供什么作用？",
+    "category": "positive",
+    "expected_ids": ["VariableType:OptionSetType","sec-7.17"],
+    "gold_facts": [
+      {"id":"H09.f1","claim":"OptionSetValues 数组位置与位对应，最低有效位对应第一项；每项为该位的可读表示，无具体含义的位用 empty LocalizedText。","source":{"section":"7.17","start_line":2200,"end_line":2200}},
+      {"id":"H09.f2","claim":"值的数据类型必须能表示位掩码，为有符号/无符号整型或 ByteString；可选 BitMask 以 Boolean 数组表示各位，允许订阅单个位对应的条目。","source":{"section":"7.17","start_line":2204,"end_line":2206}}
+    ],
+    "reference_answer": "最低有效位对应 OptionSetValues 第一项，无含义位用空 LocalizedText。值为有符号或无符号整型或 ByteString；可选 Boolean[] BitMask 便于订阅单个位。"
+  },
+  {
+    "id": "H10",
+    "question": "Can SelectionListType.Selections change or become empty, how should clients obtain it before use, and does a missing RestrictToList restrict writes to listed values?",
+    "category": "positive",
+    "expected_ids": ["VariableType:SelectionListType","sec-7.18"],
+    "gold_facts": [
+      {"id":"H10.f1","claim":"Selections 可以动态变化，包括长度变化；可以为空，表示当前没有可写的有效值。客户端应订阅该属性或在使用前读取。","source":{"section":"7.18","start_line":2225,"end_line":2225}},
+      {"id":"H10.f2","claim":"RestrictToList 为 True 时值受限于 Selections；该可选属性缺失或为 False 时不受列表限制。","source":{"section":"7.18","start_line":2231,"end_line":2231}}
+    ],
+    "reference_answer": "Selections may change, including length, and may be empty when no valid value can currently be written. Subscribe or read just before use. RestrictToList=True restricts to the list; absent or False does not."
+  },
+  {
+    "id": "H11",
+    "question": "AudioVariableType 的 DataType 和 ValueRank 是什么？它有哪些 String 类型的可选标识属性？",
+    "category": "positive",
+    "expected_ids": ["VariableType:AudioVariableType","table-89"],
+    "gold_facts": [
+      {"id":"H11.f1","claim":"AudioVariableType 的 DataType 为 AudioDataType，ValueRank 为 -1，即 Scalar。","source":{"section":"7.19","table":"table-89","start_line":2259,"end_line":2260}},
+      {"id":"H11.f2","claim":"ListId、AgencyId 和 VersionId 都是 String 类型的 Optional Property。","source":{"section":"7.19","table":"table-89","start_line":2263,"end_line":2265}}
+    ],
+    "reference_answer": "DataType 是 AudioDataType，ValueRank=-1（Scalar）。ListId、AgencyId、VersionId 均为 String 类型的可选 Property。"
+  },
+  {
+    "id": "H12",
+    "question": "Which reference kind and node classes may the InterfaceTypes browse entry organize, and must every interface in a Server be reachable from it?",
+    "category": "positive",
+    "expected_ids": ["Object:InterfaceTypes","sec-8.2.11"],
+    "gold_facts": [
+      {"id":"H12.f1","claim":"InterfaceTypes 用 Organizes 关联 Objects 和代表 Interfaces 的 ObjectTypes，不得引用其他 NodeClass。","source":{"section":"8.2.11","start_line":2665,"end_line":2665}},
+      {"id":"H12.f2","claim":"所有 Interfaces 应能从此处沿 HierarchicalReferences 直接或间接浏览只是意图，不是强制要求；服务器可省略行业熟知的接口。","source":{"section":"8.2.11","start_line":2669,"end_line":2669}}
+    ],
+    "reference_answer": "It uses Organizes for Objects and interface ObjectTypes, with no other NodeClasses. Reachability of every interface is intended but not required; some well-known interfaces may be omitted."
+  },
+  {
+    "id": "H13",
+    "question": "GetMonitoredItems Method 的输入 subscriptionId 与两个输出数组各是什么类型、含义？若调用不在拥有该订阅的 Session 上下文中，会返回什么错误？",
+    "category": "positive",
+    "expected_ids": ["Method:GetMonitoredItems","sec-9.1"],
+    "gold_facts": [
+      {"id":"H13.f1","claim":"输入 subscriptionId 为 UInt32，标识订阅；输出 serverHandles 与 clientHandles 均为 UInt32[]，分别为该订阅所有 MonitoredItems 的 monitoredItemIds/serverHandles 和 clientHandles。","source":{"section":"9.1","start_line":2983,"end_line":2992}},
+      {"id":"H13.f2","claim":"Method 若不在拥有该订阅的 Session 上下文调用，返回 Bad_UserAccessDenied。","source":{"section":"9.1","start_line":2998,"end_line":2998}}
+    ],
+    "reference_answer": "输入为 UInt32 subscriptionId；两个 UInt32[] 输出分别给出该订阅所有 MonitoredItems 的 monitoredItemIds/serverHandles 和 clientHandles。调用 Session 不拥有该订阅时返回 Bad_UserAccessDenied。"
+  },
+  {
+    "id": "H14",
+    "question": "What values does the ResendData Method resend, which MonitoringMode must those MonitoredItems have, and what are its input and output arguments in Part 5?",
+    "category": "positive",
+    "expected_ids": ["Method:ResendData","sec-9.2"],
+    "gold_facts": [
+      {"id":"H14.f1","claim":"ResendData 获取订阅中 data MonitoredItems 的当前值，这些项的 MonitoringMode 必须设为 Reporting。","source":{"section":"9.2","start_line":3015,"end_line":3015}},
+      {"id":"H14.f2","claim":"签名只有 UInt32 类型的输入 subscriptionId（需重发的订阅标识），没有输出参数。","source":{"section":"9.2","start_line":3019,"end_line":3024}}
+    ],
+    "reference_answer": "It resends current values of data MonitoredItems in a Subscription whose MonitoringMode is Reporting. It takes a UInt32 subscriptionId and has no output arguments."
+  },
+  {
+    "id": "H15",
+    "question": "RationalNumber 结构的 Numerator 与 Denominator 分别是什么数据类型，有理数的正负号由哪个字段表示？",
+    "category": "positive",
+    "expected_ids": ["DataType:RationalNumber","table-265"],
+    "gold_facts": [
+      {"id":"H15.f1","claim":"Numerator 为 Int32，表示分子并承载有理数的符号。","source":{"section":"12.22","table":"table-265","start_line":5119,"end_line":5119}},
+      {"id":"H15.f2","claim":"Denominator 为 UInt32，表示分母。","source":{"section":"12.22","table":"table-265","start_line":5120,"end_line":5120}}
+    ],
+    "reference_answer": "分子 Numerator 为 Int32，有理数的符号体现在分子；分母 Denominator 为 UInt32。"
+  },
+  {
+    "id": "H16",
+    "question": "When a TrimmedString Method argument or written Variable value has leading or trailing whitespace, what may the Server do, and how does Part 5 define whitespace?",
+    "category": "positive",
+    "expected_ids": ["DataType:TrimmedString","sec-12.43"],
+    "gold_facts": [
+      {"id":"H16.f1","claim":"Method 输入或写入值含前后空白时，Server 必须返回 Bad_TypeMismatch，或在处理前内部裁剪 TrimmedString。","source":{"section":"12.43","start_line":5544,"end_line":5544}},
+      {"id":"H16.f2","claim":"空白由 Unicode Database 定义的 whitespace 字符确定，即 WSpace=Y、WS，而不只是 ASCII 空格。","source":{"section":"12.43","start_line":5544,"end_line":5544}}
+    ],
+    "reference_answer": "Return Bad_TypeMismatch or trim internally before processing. Whitespace is the Unicode Database whitespace set (WSpace=Y, WS), not merely ASCII spaces."
+  }
+]

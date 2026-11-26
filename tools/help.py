@@ -22,8 +22,7 @@ Available data / 可用数据
   kb/relationships.jsonl   Entity relationship graph
   kb/chunks.jsonl          Text chunks for full-text retrieval
   kb/aliases.json          Entity aliases for case-insensitive lookup
-  indexes/fts.sqlite       SQLite FTS5 full-text index
-  indexes/embeddings.jsonl Optional local vector index for hybrid retrieval
+  indexes/fts.sqlite       SQLite FTS5 full-text index (spec-only FTS5 retrieval)
 
 Main commands / 主要命令
   python tools/help.py
@@ -122,31 +121,35 @@ Notes / 注意事项
     CLI 输出使用中文标签并保留英文技术标识符。
   - Rebuilding rewrites README.md, kb/*.jsonl, indexes/fts.sqlite and source/source_manifest.json.
     重新构建会覆盖 README.md、kb/*.jsonl、indexes/fts.sqlite 和 source/source_manifest.json。
-  python tools/ask_kb.py "ServerType" --top-k 5
-      Ask a grounded OPC UA 10000-5 Part 5 question and print citations.
+  - RAG retrieval uses exact-match and SQLite FTS5 over Part 5 specification records only.
+    RAG 检索仅基于 Part 5 规范记录执行精确匹配与 SQLite FTS5 全文检索。
 
-  python tools/ask_kb.py "ServerType" --offline
-      Use deterministic local retrieval output without an API call.
+Entry points / 入口方式
+  Core CLI (tools/) / 命令行工具:
+    python tools/ask_kb.py "ServerType" --top-k 5
+        Ask a grounded OPC UA 10000-5 Part 5 question and print citations.
 
-  python tools/ask_kb.py "ServerType" --offline --no-embeddings
-      Force exact-match and SQLite FTS5 retrieval without the optional vector index.
+    python tools/ask_kb.py "ServerType" --offline
+        Use deterministic local FTS5 retrieval output without an API call.
 
-  python -m pip install -r requirements-streamlit.txt
-  python -m streamlit run streamlit_app.py
-      Start the browser-based RAG workbench with chat history, retrieval controls, citations and evidence panels.
+    python tools/evaluate_retrieval.py
+        Report hit@1, hit@3, recall@1, recall@3, MRR and latency_ms on the Part 5 retrieval fixture.
 
-  python -m pip install -r requirements-api.txt
-  python -m uvicorn api_server:app --reload --port 8000
-      Start the FastAPI service. Interactive API docs are available at /docs.
+  TUI (tui.py) / 终端交互界面:
+    python -m pip install -r requirements-tui.txt
+    python tui.py
+        Start the Textual TUI for search, entity inspection, relationship tracing, RAG Q&A and graph export.
 
-  cd web
-  npm.cmd install
-  npm.cmd run dev
-      Start the React RAG console. The Vite development server proxies /api to FastAPI.
-      React uses an anonymous HttpOnly session cookie; history is stored in data/rag_sessions.sqlite3.
+  Web Console (api_server.py + web/) / Web 控制台:
+    python -m pip install -r requirements-api.txt
+    python -m uvicorn api_server:app --reload --port 8000
+        Start the FastAPI service. Interactive API docs are available at /docs.
 
-  python tools/evaluate_retrieval.py
-      Report Recall@1 and Recall@3 on the Part 5 retrieval fixture.
+    cd web
+    npm.cmd install
+    npm.cmd run dev
+        Start the React RAG console. The Vite development server proxies /api to FastAPI.
+        React uses an anonymous HttpOnly session cookie; history is stored in data/rag_sessions.sqlite3.
 """.strip()
 
 

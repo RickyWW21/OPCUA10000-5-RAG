@@ -14,5 +14,15 @@ env/
 config.toml
 exports/
 *.md
+!wiki/
+!wiki/**/*.md
+!reports/part5-wiki-evaluation/report.md
+!reports/part5-wiki-evaluation/report-initial.md
+!reports/part5-wiki-evaluation/report-label-budget.md
+!reports/part5-wiki-evaluation/report-recall.md
+!reports/part5-wiki-evaluation/report-boundary.md
+!reports/part5-wiki-evaluation/report-null-empty.md
+!reports/part5-wiki-holdout-20261119/*.md
 docs/
 .worktrees/
+.superpowers/

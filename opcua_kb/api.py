@@ -11,6 +11,45 @@ from typing import Any
 
 from .graph import build_knowledge_graph
 
+_QUERY_ALIASES = {
+    "命名空间": "NamespaceArray namespace",
+    "会话": "Session",
+    "缓存": "cache",
+    "索引": "index NamespaceIndex",
+    "诊断": "diagnostics",
+    "范围": "scope",
+    "附录": "Annex",
+}
+_ANNEX_REFERENCE = re.compile(r"(?:\bAnnex|附录)\s*([A-Z])(?![A-Za-z])", re.IGNORECASE)
+
+
+def expand_query(query: str) -> str:
+    """Add a small Part 5 bilingual glossary; preserve the original question."""
+
+    terms = [value for phrase, value in _QUERY_ALIASES.items() if phrase in query]
+    return " ".join([*terms, query])
+
+
+def load_source_manifest(root: str | Path) -> dict[str, Any]:
+    """Read and validate ``source/source_manifest.json`` under ``root``."""
+
+    manifest_path = Path(root) / "source" / "source_manifest.json"
+    try:
+        contents = manifest_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"Invalid source manifest JSON: {manifest_path}") from exc
+    except OSError as exc:
+        raise OSError(f"Unable to read source manifest: {manifest_path}") from exc
+    try:
+        manifest = json.loads(contents)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid source manifest JSON: {manifest_path}") from exc
+    if not isinstance(manifest, dict):
+        raise ValueError(f"Invalid source manifest JSON object: {manifest_path}")
+    return manifest
+
 
 class KnowledgeBase:
     """Read-only facade over the generated JSONL records and SQLite FTS index."""
@@ -52,11 +91,11 @@ class KnowledgeBase:
             return []
 
         # Exact identifiers should remain ahead of less precise FTS matches.
-        exact_results = self._exact_search(query)
+        exact_results = [{**item, "match_kind": "exact"} for item in self._exact_search(query)]
         if len(exact_results) >= top_k:
             return exact_results[:top_k]
 
-        rows = self._search_fts(query, top_k) if self.index_path.exists() else []
+        rows = self._search_fts(expand_query(query), top_k) if self.index_path.exists() else []
         return _append_unique_search_results(exact_results, rows, top_k)
 
     def relationships(
@@ -92,10 +131,40 @@ class KnowledgeBase:
 
         return self._load_chapters().get(section)
 
+    def chapters(self) -> list[dict[str, Any]]:
+        """Return all cached chapter records in artifact order."""
+
+        return list(self._load_chapters().values())
+
+    def chapter_by_id(self, chapter_id: str) -> dict[str, Any] | None:
+        """Return one chapter by its canonical record ID such as ``sec-6.3.1``."""
+
+        return self._load_chapters_by_id().get(chapter_id)
+
     def table(self, number: int | str) -> dict[str, Any] | None:
         """Return one table by numeric or annex-style identifier such as ``C.1``."""
 
         return self._load_tables().get(str(number).lower())
+
+    def tables(self) -> list[dict[str, Any]]:
+        """Return all cached table records in artifact order."""
+
+        return list(self._load_tables().values())
+
+    def table_by_id(self, table_id: str) -> dict[str, Any] | None:
+        """Return one table by its canonical record ID such as ``table-9``."""
+
+        return self._load_tables_by_id().get(table_id)
+
+    def chunks(self) -> dict[str, dict[str, Any]]:
+        """Return cached chunk records keyed by canonical chunk ID."""
+
+        return dict(self._load_chunks())
+
+    def all_relationships(self) -> list[dict[str, Any]]:
+        """Return all cached relationship records in artifact order."""
+
+        return list(self._load_relationships())
 
     def evidence(self, record_id: str, record_type: str) -> str | None:
         """Return the complete original evidence text for a search result.
@@ -171,9 +240,12 @@ class KnowledgeBase:
                     }
                 )
 
-        section_match = re.search(r"(?<![A-Za-z.])(\d+(?:\.\d+){0,5})(?![A-Za-z.])", query)
-        if section_match:
-            chapter = self.chapter(section_match.group(1))
+        reference_query = re.sub(r"\bPart\s+\d+\b|第\s*\d+\s*部分", "", query, flags=re.IGNORECASE)
+        section_match = re.search(r"(?<![A-Za-z.])(\d+(?:\.\d+){0,5})(?![A-Za-z.])", reference_query)
+        annex_match = _ANNEX_REFERENCE.search(query)
+        if section_match or annex_match:
+            section = f"Annex {annex_match.group(1).upper()}" if annex_match else section_match.group(1)
+            chapter = self.chapter(section)
             if chapter:
                 results.append(
                     {
@@ -558,6 +630,7 @@ def _append_unique_search_results(
                 "section": row["section"],
                 "table_number": row["table_number"],
                 "snippet": row["snippet"],
+                "match_kind": "fts",
             }
         )
         if len(results) >= top_k:
@@ -582,4 +655,8 @@ def _fts_query(query: str) -> str:
     tokens = re.findall(r"[\w\u4e00-\u9fff]+", query, flags=re.UNICODE)
     if not tokens:
         return query.replace('"', '""')
-    return " OR ".join(f'"{token}"' for token in tokens[:12])
+    expression = " OR ".join(f'"{token}"' for token in tokens[:12])
+    annex = _ANNEX_REFERENCE.search(query)
+    if annex:
+        expression = f'({expression}) AND section : "Annex {annex.group(1).upper()}"'
+    return expression

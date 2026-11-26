@@ -15,15 +15,11 @@ from typing import Any
 try:
     from .builder_models import Chapter, Table
     from .builder_parse import parse_chapters, parse_tables
-    from .embeddings import EmbeddingProvider, SentenceTransformerEmbeddingProvider
-    from .vector_index import VectorIndex
 except ImportError:
     if __package__:
         raise
     from builder_models import Chapter, Table
     from builder_parse import parse_chapters, parse_tables
-    from embeddings import EmbeddingProvider, SentenceTransformerEmbeddingProvider
-    from vector_index import VectorIndex
 
 DOC_NAME = "OPC-10000-5"
 
@@ -36,10 +32,6 @@ def build(
     root: Path,
     source: Path,
     rebuild: bool = False,
-    *,
-    embeddings: bool = False,
-    embedding_model: str | None = None,
-    embedding_provider: EmbeddingProvider | None = None,
 ) -> dict[str, int]:
     """Run the complete source-copy, parse, export, and index pipeline."""
 
@@ -60,11 +52,7 @@ def build(
     entities, relationships, aliases = _extract_entities_and_relationships(chapters, tables, target_source)
     chunks = _make_chunks(chapters, tables, entities)
 
-    if embeddings and embedding_provider is None:
-        embedding_provider = SentenceTransformerEmbeddingProvider(
-            embedding_model or "sentence-transformers/all-MiniLM-L6-v2"
-        )
-    _preflight_generated_targets(root, source, include_embeddings=embeddings)
+    _preflight_generated_targets(root, source)
     source_needs_copy = rebuild or not target_source.exists() or source_hash != _read_source_hash(target_source)
     _make_directory(root.parent)
     for directory in (root / "tools", root / "exports"):
@@ -87,17 +75,12 @@ def build(
         _write_jsonl(kb_dir / "chunks.jsonl", chunks)
         _write_text(kb_dir / "aliases.json", json.dumps(aliases, ensure_ascii=False, indent=2), "write aliases artifact")
         _build_fts(indexes_dir / "fts.sqlite", chapters, tables, entities, chunks)
-        if embeddings and embedding_provider is not None:
-            VectorIndex(stage_root).build(
-                _embedding_records(chunks, entities), embedding_provider, source_hash=source_hash
-            )
         _write_readme(stage_root, metadata, len(chapters), len(tables), len(entities), len(relationships))
         _publish_generated_artifacts(
             stage_root,
             root,
             source.name,
             include_source=source_needs_copy,
-            include_embeddings=embeddings,
         )
     except _PublicationRollbackError:
         retain_stage_root = True
@@ -112,13 +95,11 @@ def build(
         "relationships": len(relationships),
         "chunks": len(chunks),
     }
-    if embeddings:
-        stats["embeddings"] = len(_embedding_records(chunks, entities))
     return stats
 
 
 def _generated_artifact_paths(
-    source_name: str, include_source: bool = True, include_embeddings: bool = False
+    source_name: str, include_source: bool = True
 ) -> tuple[Path, ...]:
     """Return the artifact paths owned by the builder publication transaction."""
 
@@ -133,14 +114,10 @@ def _generated_artifact_paths(
         Path("indexes") / "fts.sqlite",
         Path("README.md"),
     )
-    vector_artifacts = (
-        Path("indexes") / "embeddings.jsonl",
-        Path("indexes") / "embeddings.meta.json",
-    ) if include_embeddings else ()
-    return ((Path("source") / source_name,) if include_source else ()) + artifacts + vector_artifacts
+    return ((Path("source") / source_name,) if include_source else ()) + artifacts
 
 
-def _preflight_generated_targets(root: Path, source: Path, *, include_embeddings: bool = False) -> None:
+def _preflight_generated_targets(root: Path, source: Path) -> None:
     """Preserve write error contracts for destinations that are directories."""
 
     actions = {
@@ -155,13 +132,6 @@ def _preflight_generated_targets(root: Path, source: Path, *, include_embeddings
         Path("indexes") / "fts.sqlite": "prepare FTS index",
         Path("README.md"): "write README",
     }
-    if include_embeddings:
-        actions.update(
-            {
-                Path("indexes") / "embeddings.jsonl": "write embedding index",
-                Path("indexes") / "embeddings.meta.json": "write embedding metadata",
-            }
-        )
     for relative_path, action in actions.items():
         target = root / relative_path
         if target.is_dir():
@@ -176,11 +146,10 @@ def _publish_generated_artifacts(
     root: Path,
     source_name: str,
     include_source: bool = True,
-    include_embeddings: bool = False,
 ) -> None:
     """Replace generated files with a rollback-capable same-filesystem transaction."""
 
-    artifacts = _generated_artifact_paths(source_name, include_source, include_embeddings)
+    artifacts = _generated_artifact_paths(source_name, include_source)
     backup_root = stage_root / ".backup"
     published: list[Path] = []
     backed_up: list[Path] = []
@@ -523,37 +492,6 @@ def _make_chunks(chapters: list[Chapter], tables: list[Table], entities: list[di
             }
         )
     return chunks
-
-
-def _embedding_records(
-    chunks: list[dict[str, Any]], entities: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
-    records: list[dict[str, Any]] = []
-    for entity in entities:
-        records.append(
-            {
-                "id": entity["id"],
-                "type": "entity",
-                "title": entity["name"],
-                "section": entity.get("section"),
-                "snippet": entity.get("summary_zh") or entity.get("summary_en", ""),
-                "text": entity.get("summary_en") or entity.get("summary_zh", ""),
-                "doc": DOC_NAME,
-            }
-        )
-    for chunk in chunks:
-        records.append(
-            {
-                "id": chunk["id"],
-                "type": "chunk",
-                "title": " / ".join(chunk.get("heading_path", [])) or chunk["id"],
-                "section": chunk.get("section"),
-                "snippet": chunk.get("text", "")[:600],
-                "text": chunk.get("text", ""),
-                "doc": DOC_NAME,
-            }
-        )
-    return records
 
 
 def _build_fts(path: Path, chapters: list[Chapter], tables: list[Table], entities: list[dict[str, Any]], chunks: list[dict[str, Any]]) -> None:
@@ -933,8 +871,6 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--source", default=r"C:\Users\admin\Downloads\OPC-10000-5-v1.05.06.md")
     parser.add_argument("--root", default=".")
     parser.add_argument("--rebuild", action="store_true")
-    parser.add_argument("--embeddings", action="store_true", help="Build the optional local embedding index.")
-    parser.add_argument("--embedding-model", default=None, help="Local sentence-transformers model name.")
     return parser
 
 
@@ -945,8 +881,6 @@ def run_build(args: argparse.Namespace) -> None:
         Path(args.root),
         Path(args.source),
         rebuild=args.rebuild,
-        embeddings=args.embeddings,
-        embedding_model=args.embedding_model,
     )
     print(json.dumps(stats, ensure_ascii=False, indent=2))
 

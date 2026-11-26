@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import inspect
 import unittest
 
-from opcua_kb.builder import Chapter, Table, _apply_table_to_entity, _entity_kind
+from opcua_kb.builder import Chapter, Table, _apply_table_to_entity, _entity_kind, build, create_parser
 from opcua_kb.builder_parse import parse_chapters
 from opcua_kb.builder_models import Chapter as ModelChapter, Table as ModelTable
 
@@ -111,3 +112,13 @@ class BuilderTests(unittest.TestCase):
         for section, title, expected in cases:
             with self.subTest(section=section, title=title):
                 self.assertEqual(expected, _entity_kind(section, title))
+
+    def test_builder_has_no_embedding_parameters_or_cli_flags(self) -> None:
+        params = inspect.signature(build).parameters
+        self.assertNotIn("embeddings", params)
+        self.assertNotIn("embedding_model", params)
+        self.assertNotIn("embedding_provider", params)
+        parser = create_parser()
+        option_strings = {opt for action in parser._actions for opt in action.option_strings}
+        self.assertNotIn("--embeddings", option_strings)
+        self.assertNotIn("--embedding-model", option_strings)
